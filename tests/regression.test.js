@@ -51,6 +51,8 @@ const client = { useCostView, ...createCostChips(react, useCostView, createCostD
 const rate = (value) => ({ input: value, output: value, cacheRead: value, cacheWrite: value });
 
 test('initializing view clears when pricing loads or fails and supports both chips', () => {
+	configSnapshot = null;
+	loadStatus = 'idle';
 	const buckets = { uncachedInputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 	const raw = {
 		accounting: { totals: buckets, byRoute: { 'p/a': buckets }, turns: {}, skippedTurns: 0 },
@@ -70,6 +72,36 @@ test('initializing view clears when pricing loads or fails and supports both chi
 	configSnapshot = null;
 	loadStatus = 'error';
 	assert.equal(client.useCostView(props).initializing, undefined);
+	loadStatus = 'idle';
+});
+
+test('priced server views display session and turn fees before the config request completes', () => {
+	configSnapshot = null;
+	loadStatus = 'loading';
+	const accounting = {
+		totals: { uncachedInputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+		byRoute: {},
+		turns: {},
+		skippedTurns: 0,
+	};
+	accounting.byRoute['p/a'] = accounting.totals;
+	accounting.turns['1'] = {
+		totalTokens: 100,
+		tokens: accounting.totals,
+		byRoute: accounting.byRoute,
+		recovered: false,
+	};
+	for (const price of [2, 0]) {
+		const config = { currency: 'USD', cnyPerUsd: 7.2, pricing: { 'p/a': rate(price) } };
+		const raw = { ...buildCostView(accounting, config), accounting };
+		const props = { useProjection: () => raw };
+		const view = client.useCostView(props);
+		assert.equal(view.initializing, undefined);
+		assert.equal(view.totalMicros, 100 * price);
+		assert.equal(view.turns['1'].micros, 100 * price);
+	}
+	const unpriced = { ...buildCostView(accounting, { currency: 'USD', cnyPerUsd: 7.2, pricing: {} }), accounting };
+	assert.equal(client.useCostView({ useProjection: () => unpriced }).initializing, true);
 	loadStatus = 'idle';
 });
 const usage = { inputTokens: 100, outputTokens: 100, totalTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 };

@@ -38,7 +38,14 @@ const source = `
 import React from ${JSON.stringify(runtimeRequire.resolve('react'))};
 import * as ReactDom from ${JSON.stringify(runtimeRequire.resolve('react-dom'))};
 import { createRoot } from ${JSON.stringify(runtimeRequire.resolve('react-dom/client'))};
-window.fetch = async () => ({ ok: true, json: async () => ({ config: ${JSON.stringify(config)}, models: ['com-aliyun/qwen3.8-max'], revision: 'example' }) });
+window.configRequests = 0;
+const configReady = new Promise(resolve => { window.completeConfigLoad = resolve; });
+window.fetch = async () => {
+ window.configRequests++;
+ await configReady;
+ return { ok: true, json: async () => ({ config: ${JSON.stringify(config)}, models: ['com-aliyun/qwen3.8-max'], revision: 'example' }) };
+};
+import { buildCostView } from './pricing.js';
 import { createConfigStore } from './client/config-store.js';
 import { createUseCostView } from './client/cost-view.js';
 import { createCostDialog } from './client/cost-dialog.js';
@@ -48,7 +55,8 @@ import { zh, en } from './client/locales.js';
 installStyles();
 window.costCards = { ...createCostChips(React, createUseCostView(React, createConfigStore()), createCostDialog(React, ReactDom)), zh, en };
 const accounting = ${JSON.stringify(accounting)};
-const props = { t: (key, values = {}) => window.costCards[${JSON.stringify(language)}][key].replace(/\\{(\\w+)\\}/g, (_, key) => values[key] ?? ''), useProjection: () => ({ accounting }) };
+const raw = { ...buildCostView(accounting, ${JSON.stringify(config)}), accounting };
+const props = { t: (key, values = {}) => window.costCards[${JSON.stringify(language)}][key].replace(/\\{(\\w+)\\}/g, (_, key) => values[key] ?? ''), useProjection: () => raw };
 createRoot(document.getElementById('root')).render(React.createElement('div', { style: { position: 'fixed', bottom: 32, left: 32, display: 'flex', gap: 24 } }, [
  React.createElement(window.costCards.CostDockChip, { ...props, key: 'session' }),
  React.createElement(window.costCards.CostTurnChip, { ...props, key: 'turn', turn: 1 }),
@@ -75,6 +83,11 @@ try {
 		`<html><head><style>:root{--dsw-alias-label-primary:#202124;--dsw-alias-label-secondary:#555;--dsw-alias-label-tertiary:#80868b;--dsw-specific-menu:#fff;--dsw-alias-border-l1:#e2e3e5;--dsw-alias-border-l2:#eceef0;--dsw-radius-lg:8px;--dsw-radius-sm:4px;--dsw-elevation-prominent:0 2px 12px #0002}body{margin:0;font-family:Arial,sans-serif;background:#fff}</style></head><body><div id="root"></div></body></html>`,
 	);
 	await page.addScriptTag({ content: bundle.outputFiles[0].text });
+	await page.locator('.gdcc_dockPill').waitFor();
+	await page.locator('.gdcc_turnTrigger').waitFor();
+	assert.equal(await page.locator('.gdcc_initializing').count(), 0, 'configured fees show while GET is pending');
+	assert.equal(await page.evaluate(() => window.configRequests), 1, 'both chips share the pending config request');
+	await page.evaluate(() => window.completeConfigLoad());
 	const screenshotDir = process.env.SCREENSHOT_DIR ?? 'docs/images';
 	mkdirSync(screenshotDir, { recursive: true });
 	await page.locator('.gdcc_dockPill').click();

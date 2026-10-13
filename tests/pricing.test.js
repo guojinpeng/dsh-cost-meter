@@ -261,6 +261,59 @@ test('startup and new history routes initialize only missing prices and preserve
 	assert.equal(calls, 2);
 });
 
+test('restart with configured prices skips catalog initialization, including zero prices', async () => {
+	for (const formatVersion of [1, 2]) {
+		let stored = {
+			...config(),
+			formatVersion,
+			pricing: formatVersion === 1 ? { a: { ...zeroRate(), input: 9 }, b: zeroRate() }
+				: { 'A/a': { ...zeroRate(), input: 9 }, 'B/b': zeroRate() },
+		};
+		let calls = 0;
+		const query = {
+			listSessions: async () => [{ header: { id: 's' } }],
+			readSession: async () => ({ events: [event('A', 'a'), event('B', 'b')] }),
+		};
+		const options = {
+			readConfig: () => stored,
+			writeConfig: (value) => (stored = value),
+			backupConfig: () => {},
+			initializePrices: async () => {
+				calls++;
+				throw new Error('Unexpected catalog request');
+			},
+		};
+		for (let restart = 0; restart < 2; restart++) {
+			const history = createHistoryModels(query, options);
+			await history.config();
+			await history.config();
+			assert.equal(stored.pricing['A/a'].input, 9);
+			assert.deepEqual(stored.pricing['B/b'], zeroRate());
+		}
+		assert.equal(calls, 0);
+	}
+});
+
+test('empty first installation initializes the catalog once without adding models', async () => {
+	let stored = config(), calls = 0;
+	const history = createHistoryModels(
+		{ listSessions: async () => [], readSession: async () => ({ events: [] }) },
+		{
+			readConfig: () => stored,
+			writeConfig: (value) => (stored = value),
+			backupConfig: () => {},
+			initializePrices: async (input) => {
+				calls++;
+				return { config: input };
+			},
+		},
+	);
+	await history.config();
+	await history.config();
+	assert.equal(calls, 1);
+	assert.deepEqual(stored.pricing, {});
+});
+
 test('manual price written during initialization wins', async () => {
 	let stored = config();
 	const history = createHistoryModels(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- 修复已有模型价格时，重启 DSH 仍显示“初始化中”的问题。
+- 配置接口返回前，直接展示后端根据本地配置计算的会话费用和本轮费用。
+- 所有历史模型已有价格时，跳过 models.dev 价格初始化；零价格也视为有效配置。
+- 保留首次安装和新模型缺价时的价格初始化与提示。
+- 增加重启、零价格、首次安装和配置请求延迟的回归检查。
+
 ## 0.1.4
 
 - Use npm as the installation channel and GitHub Releases for release notes.

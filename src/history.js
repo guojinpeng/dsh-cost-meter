@@ -41,7 +41,7 @@ export function createHistoryModels(
 			let missing;
 			do {
 				missing = Object.fromEntries([...models].filter(needsPrice).map((key) => [key, zeroRate()]));
-				if (!initializedOnce || Object.keys(missing).length) {
+				if (Object.keys(missing).length || (!initializedOnce && !Object.keys(config.pricing).length)) {
 					initializedOnce = true;
 					try {
 						Object.assign(initialized, (await initializePrices({ ...config, pricing: missing })).config.pricing);

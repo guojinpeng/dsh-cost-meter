@@ -76,10 +76,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.1.4:
+Install the generated file in your DSH profile. For version 0.1.5:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.4.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.5.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.
@@ -125,7 +125,7 @@ After npm publication succeeds, create the matching Git tag and GitHub Release:
 ```powershell
 git tag v<version>
 git push origin v<version>
-gh release create v<version> --verify-tag --title "v<version>" --generate-notes --latest
+gh release create v<version> --verify-tag --title "<version>" --generate-notes --latest
 ```
 
 Replace `<version>` before you run these commands. GitHub Releases contain release

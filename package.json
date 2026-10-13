@@ -1,6 +1,6 @@
 {
   "name": "@guojinpeng/dsh-cost-meter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "description": "DSH 会话和每轮费用估算插件，支持 models.dev 价格同步与自定义模型单价。配置位于 ~/.dsh/guojinpeng/dsh-cost-meter/config.json。",
   "license": "MIT",

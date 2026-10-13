@@ -6,9 +6,10 @@ export function createUseCostView(react, store) {
 		const raw = props.useProjection(PROJECTION_KEY);
 		const snapshot = react.useSyncExternalStore(store.subscribe, store.getSnapshot);
 		const loadStatus = react.useSyncExternalStore(store.subscribe, store.getLoadStatus);
-		const missing =
-			!snapshot ||
-			(raw?.accounting && Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key]));
+		// The server already prices the projection from the local configuration.
+		const missing = snapshot
+			? raw?.accounting && Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key])
+			: !raw || raw.unpricedTokens !== 0;
 		react.useEffect(() => {
 			if (
 				!snapshot ||
