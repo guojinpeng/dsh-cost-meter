@@ -21,16 +21,8 @@ dsh plugin --profile web add -w @guojinpeng/dsh-cost-meter
 将 `web` 替换为你使用的 profile 名称。
 如果已安装旧版无 scope 的插件，请先禁用旧版，再安装此插件。
 
-如果 npm 包尚不可用，请从
-[GitHub 最新版安装包](https://github.com/guojinpeng/dsh-cost-meter/releases/latest/download/guojinpeng-dsh-cost-meter.tgz)
-下载 scoped 安装包。在下载目录执行：
-
-```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter.tgz
-```
-
-安装后重启 DSH。
-请保留下载的安装包，不要改变其安装路径。
+通过 npm 安装已发布版本，npm 提供构建后的安装包。
+GitHub 用于保存源码和发布说明。
 
 ## 功能
 
@@ -116,12 +108,12 @@ npm test
 npm run pack:release
 ```
 
-检查安装包的文件列表。`pack:release` 生成带版本号的 npm 安装包，
-并复制一份内容相同的 `guojinpeng-dsh-cost-meter.tgz`，用于 GitHub Release。
-提交并推送版本变更，然后发布带版本号的安装包。以 0.1.3 为例：
+检查安装包的文件列表。`pack:release` 执行 `npm pack`，生成带版本号的 npm 安装包。
+提交并推送版本变更，然后发布该安装包。
+执行前，将 `<version>` 替换为本次的新版本号：
 
 ```powershell
-npm publish ./guojinpeng-dsh-cost-meter-0.1.3.tgz --access public --registry=https://registry.npmjs.org/
+npm publish ./guojinpeng-dsh-cost-meter-<version>.tgz --access public --registry=https://registry.npmjs.org/
 npm view @guojinpeng/dsh-cost-meter version --registry=https://registry.npmjs.org/
 ```
 
@@ -130,13 +122,13 @@ npm view @guojinpeng/dsh-cost-meter version --registry=https://registry.npmjs.or
 npm 发布成功后，创建对应的 Git 标签和 GitHub Release：
 
 ```powershell
-git tag v0.1.3
-git push origin v0.1.3
-gh release create v0.1.3 ./guojinpeng-dsh-cost-meter.tgz --verify-tag --title "v0.1.3" --generate-notes --latest
+git tag v<version>
+git push origin v<version>
+gh release create v<version> --verify-tag --title "v<version>" --generate-notes --latest
 ```
 
-每次发布都使用新的版本号，并将固定名称的安装包上传到最新 Release。
-保持附件名称不变，最新版下载链接才能持续可用。
+执行前替换 `<version>`。GitHub Release 用于发布说明，无需上传安装包。
+npm 托管安装包，插件市场通过 npm 包的 `repository` 字段关联仓库。
 
 发布后，用户可执行以下命令安装：
 

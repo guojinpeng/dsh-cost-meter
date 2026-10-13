@@ -21,16 +21,8 @@ dsh plugin --profile web add -w @guojinpeng/dsh-cost-meter
 Replace `web` with your profile name.
 If you used the old unscoped package, disable it before you install this package.
 
-If the npm package is not available, download the scoped package from
-[the latest GitHub Release](https://github.com/guojinpeng/dsh-cost-meter/releases/latest/download/guojinpeng-dsh-cost-meter.tgz).
-Run this command in the download directory:
-
-```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter.tgz
-```
-
-Restart DSH.
-Keep the downloaded file at the installation path.
+Install published versions from npm. npm provides the built package.
+GitHub contains the source code and release notes.
 
 ## Features
 
@@ -116,12 +108,12 @@ npm test
 npm run pack:release
 ```
 
-Check the package file list. `pack:release` creates the versioned npm tarball and
-an identical copy named `guojinpeng-dsh-cost-meter.tgz` for GitHub Releases.
-Commit and push the version change. Then publish the versioned tarball. For 0.1.3:
+Check the package file list. `pack:release` runs `npm pack` and creates the versioned
+npm tarball. Commit and push the version change. Then publish that tarball.
+For example, replace `<version>` with the new version number:
 
 ```powershell
-npm publish ./guojinpeng-dsh-cost-meter-0.1.3.tgz --access public --registry=https://registry.npmjs.org/
+npm publish ./guojinpeng-dsh-cost-meter-<version>.tgz --access public --registry=https://registry.npmjs.org/
 npm view @guojinpeng/dsh-cost-meter version --registry=https://registry.npmjs.org/
 ```
 
@@ -130,13 +122,14 @@ Each package version can be published only once.
 After npm publication succeeds, create the matching Git tag and GitHub Release:
 
 ```powershell
-git tag v0.1.3
-git push origin v0.1.3
-gh release create v0.1.3 ./guojinpeng-dsh-cost-meter.tgz --verify-tag --title "v0.1.3" --generate-notes --latest
+git tag v<version>
+git push origin v<version>
+gh release create v<version> --verify-tag --title "v<version>" --generate-notes --latest
 ```
 
-Use the new version number for each release. Always upload the fixed-name asset
-to the latest release. Keep that asset name unchanged so the latest download URL works.
+Replace `<version>` before you run these commands. GitHub Releases contain release
+notes; uploading a tarball is optional. npm hosts the installation package.
+The plugin catalog links the npm package through its `repository` field.
 
 Users can then install the package:
 

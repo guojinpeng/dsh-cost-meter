@@ -35,7 +35,7 @@
   "scripts": {
     "build": "tsup src/index.js src/client.js --format esm --out-dir dist --clean --no-splitting",
     "prepack": "npm run build",
-    "pack:release": "node scripts/pack-release.js",
+    "pack:release": "npm pack",
     "test": "node --test tests/*.test.js"
   },
   "dsh": {
