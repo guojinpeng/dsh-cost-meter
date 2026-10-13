@@ -1,0 +1,67 @@
+{
+  "name": "dsh-cost-meter",
+  "version": "0.1.2",
+  "type": "module",
+  "description": "用于DSH聊天界面的会话和每轮成本标签，价格根据@deepseek-ai/dsh-token-meter报告的token用量计算。模型费率位于~/.dsh/dsh-cost-meter/config.json。",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "cost",
+    "token-meter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guojinpeng/dsh-cost-meter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guojinpeng/dsh-cost-meter/issues"
+  },
+  "homepage": "https://github.com/guojinpeng/dsh-cost-meter",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsup src/index.js src/client.js --format esm --out-dir dist --clean --no-splitting",
+    "prepack": "npm run build",
+    "test": "node --test tests/*.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat"
+      ]
+    }
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-session-query": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.1",
+    "@deepseek-ai/dsh-session-projection": ">=0.2.0-rc.1",
+    "@deepseek-ai/dsh-token-meter": ">=0.2.0-rc.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,31 @@
+# Dependencies and generated artifacts
+node_modules/
+dist/
+*.tgz
+coverage/
+.cache/
+*.tsbuildinfo
+
+# Local runtime data and credentials
+.dsh/
+data/
+config.json
+.env
+.env.*
+!.env.example
+.npmrc.local
+
+# Logs, backups and temporary files
+*.log
+*.bak
+*.tmp
+*.tmp-*
+playwright-report/
+test-results/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
