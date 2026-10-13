@@ -9,6 +9,7 @@ import { test, after } from 'node:test';
 import { Readable } from 'node:stream';
 import { execSync } from 'node:child_process';
 import { buildCostView } from '../src/pricing.js';
+import * as identity from '../src/identity.js';
 
 // Resolve peers from the installed DSH without changing the user's profile.
 const runtime =
@@ -42,6 +43,7 @@ const clientSource = readFileSync(new URL('../src/client.js', import.meta.url), 
 	.replace(/^import .*;$/gm, '')
 	.replace('n.apply = apply;', 'n.useCostView = useCostView; n.InitializingChip = InitializingChip; n.CostTurnAction = CostTurnAction; n.apply = apply;');
 vm.runInNewContext(clientSource, {
+	...identity,
 	createConfigStore: () => ({ getSnapshot: () => configSnapshot, getLoadStatus: () => loadStatus, subscribe: () => () => {} }),
 	buildCostView,
 	window: {
@@ -164,7 +166,7 @@ async function request(
 	headers,
 	body = '{}',
 	remoteAddress = '192.168.1.20',
-	url = '/dsh-cost-meter/config',
+	url = '/guojinpeng/dsh-cost-meter/config',
 	prices,
 ) {
 	const req = Readable.from([Buffer.from(body)]);
@@ -229,7 +231,7 @@ test('concurrent config edits during sync and network failure do not overwrite p
 	};
 	const before = (await request('GET', headers)).payload;
 	const syncBody = JSON.stringify({ revision: before.revision, source: 'models.dev' });
-	const conflict = await request('POST', headers, syncBody, undefined, '/dsh-cost-meter/pricing/sync', {
+	const conflict = await request('POST', headers, syncBody, undefined, '/guojinpeng/dsh-cost-meter/pricing/sync', {
 		prices: async (config) => {
 			saved = { ...saved, cnyPerUsd: 8 };
 			return { config: { ...config, cnyPerUsd: 9 }, report: {} };
@@ -243,7 +245,7 @@ test('concurrent config edits during sync and network failure do not overwrite p
 		headers,
 		JSON.stringify({ revision: current.revision, source: 'models.dev' }),
 		undefined,
-		'/dsh-cost-meter/pricing/sync',
+		'/guojinpeng/dsh-cost-meter/pricing/sync',
 		{
 			prices: async () => {
 				throw new Error('offline');

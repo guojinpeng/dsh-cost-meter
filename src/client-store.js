@@ -1,4 +1,5 @@
 import { RATE_KEYS, zeroRate } from './pricing.js';
+import { HTTP_BASE } from './identity.js';
 
 export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 	let snapshot = null,
@@ -16,7 +17,7 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 	};
 	async function request(path, body) {
 		const response = await fetcher(
-			`/dsh-cost-meter/${path}`,
+			`${HTTP_BASE}/${path}`,
 			body === undefined
 				? undefined
 				: {

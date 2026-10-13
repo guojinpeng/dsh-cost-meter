@@ -1,10 +1,20 @@
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
 const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-012-'));
+const legacyConfig = {
+	formatVersion: 2,
+	currency: 'USD',
+	cnyPerUsd: 7.8,
+	showDockChip: true,
+	showTurnChip: true,
+	pricing: {},
+};
+mkdirSync(join(home, 'dsh-cost-meter'), { recursive: true });
+writeFileSync(join(home, 'dsh-cost-meter', 'config.json'), JSON.stringify(legacyConfig));
 const runtime =
 	process.env.DSH_RUNTIME_ROOT ??
 	join(execFileSync('npm.cmd', ['root', '-g'], { encoding: 'utf8', shell: true }).trim(), '@deepseek-ai', 'dsh');
@@ -13,7 +23,7 @@ const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_MODE: 'DISABLED' };
 const profile = 'cost-meter-smoke';
 const cli = (args) => execFileSync(process.execPath, [bin, ...args], { env, encoding: 'utf8', stdio: 'pipe' });
 cli(['--profile', profile, '--from-default-profile', 'web', '--dump-config']);
-cli(['plugin', '--profile', profile, 'add', '-w', resolve('dsh-cost-meter-0.1.2.tgz')]);
+cli(['plugin', '--profile', profile, 'add', '-w', resolve('guojinpeng-dsh-cost-meter-0.1.2.tgz')]);
 const child = spawn(process.execPath, [bin, '--profile', profile, '--no-open', '--port', '0'], {
 	env,
 	stdio: ['ignore', 'pipe', 'pipe'],
@@ -36,15 +46,17 @@ try {
 	}
 	assert.ok(url, 'DSH authenticated startup URL');
 	const origin = new URL(url).origin;
-	assert.equal((await fetch(origin + '/dsh-cost-meter/config')).status, 401);
+	assert.equal((await fetch(origin + '/guojinpeng/dsh-cost-meter/config')).status, 401);
 	const auth = await fetch(url, { redirect: 'manual' });
 	const cookie = auth.headers.get('set-cookie').split(';')[0];
 	const headers = { cookie, 'content-type': 'application/json', origin };
-	const get = await fetch(origin + '/dsh-cost-meter/config', { headers });
+	const get = await fetch(origin + '/guojinpeng/dsh-cost-meter/config', { headers });
 	assert.equal(get.status, 200);
 	const payload = await get.json();
+	assert.equal(payload.config.cnyPerUsd, 7.8, 'legacy config is copied to the namespaced directory');
+	assert.equal(payload.config.currency, 'USD');
 	assert.deepEqual(payload.models, []);
-	const save = await fetch(origin + '/dsh-cost-meter/config', {
+	const save = await fetch(origin + '/guojinpeng/dsh-cost-meter/config', {
 		method: 'POST',
 		headers,
 		body: JSON.stringify({
@@ -53,12 +65,17 @@ try {
 		}),
 	});
 	assert.equal(save.status, 200);
+	assert.deepEqual(
+		JSON.parse(readFileSync(join(home, 'dsh-cost-meter', 'config.json'), 'utf8')),
+		legacyConfig,
+		'legacy config remains unchanged',
+	);
 	const page = await (await fetch(origin, { headers })).text();
 	const boot = JSON.parse(page.match(/globalThis\["__DSH_BOOT__"\] = ([\s\S]*?)<\/script>/)[1]);
 	let entry;
 	const visit = (value) => {
 		if (!value || typeof value !== 'object') return;
-		if (value.id === 'dsh-cost-meter' && value.url) entry = value;
+		if (value.id === '@guojinpeng/dsh-cost-meter' && value.url) entry = value;
 		for (const item of Object.values(value)) visit(item);
 	};
 	visit(boot);
@@ -68,9 +85,12 @@ try {
 	const js = await client.text();
 	assert.match(js, /__ModuleLoader__/);
 	assert.doesNotMatch(js, /from\s*["']\.\//, 'client bundle must not depend on inaccessible sibling assets');
-	assert.ok(existsSync(join(home, 'dsh-cost-meter', 'data', 'models.dev.json')), 'first startup caches the catalog');
+	assert.ok(
+		existsSync(join(home, 'guojinpeng', 'dsh-cost-meter', 'data', 'models.dev.json')),
+		'first startup caches the catalog',
+	);
 	const current = await save.json();
-	const sync = await fetch(origin + '/dsh-cost-meter/pricing/sync', {
+	const sync = await fetch(origin + '/guojinpeng/dsh-cost-meter/pricing/sync', {
 		method: 'POST',
 		headers,
 		body: JSON.stringify({ source: 'models.dev', revision: current.revision }),
@@ -98,7 +118,7 @@ try {
 			await page.getByRole('button', { name: '插件', exact: true }).click();
 			await page.keyboard.press('Escape');
 			await page.waitForTimeout(300);
-			await page.getByText('dsh-cost-meter', { exact: true }).first().click();
+			await page.getByText('@guojinpeng/dsh-cost-meter', { exact: true }).first().click();
 			await page.waitForTimeout(1000);
 			await page.getByText('暂无模型调用历史', { exact: true }).waitFor();
 			let fixture = {
@@ -118,12 +138,12 @@ try {
 				},
 			};
 			let syncCalls = 0;
-			await page.route('**/dsh-cost-meter/config', async (route) => {
+			await page.route('**/guojinpeng/dsh-cost-meter/config', async (route) => {
 				if (route.request().method() === 'POST')
 					fixture = { ...fixture, config: route.request().postDataJSON().config, revision: 'fixture-saved' };
 				await route.fulfill({ json: fixture });
 			});
-			await page.route('**/dsh-cost-meter/pricing/sync', async (route) => {
+			await page.route('**/guojinpeng/dsh-cost-meter/pricing/sync', async (route) => {
 				syncCalls++;
 				await route.fulfill({
 					json: { ...fixture, report: { updated: fixture.models, unmatched: [], unsupported: [], ambiguous: [] } },
@@ -131,9 +151,9 @@ try {
 			});
 			await page.getByRole('button', { name: '重新加载', exact: true }).click();
 			await page.getByText('qwen3.8-max', { exact: true }).waitFor();
-			assert.deepEqual(await page.locator('.dcc_provider').allTextContents(), ['A', 'B']);
-			assert.equal(await page.locator('.dcc_model').first().getAttribute('title'), 'A/qwen3.8-max');
-			assert.equal(await page.locator('.dcc_model small').count(), 0);
+			assert.deepEqual(await page.locator('.gdcc_provider').allTextContents(), ['A', 'B']);
+			assert.equal(await page.locator('.gdcc_model').first().getAttribute('title'), 'A/qwen3.8-max');
+			assert.equal(await page.locator('.gdcc_model small').count(), 0);
 			assert.ok(await page.getByText('模型单价 (USD / 1M tokens)', { exact: true }).isVisible());
 			page.once('dialog', (dialog) => dialog.dismiss());
 			await page.getByRole('button', { name: '同步价格', exact: true }).click();
@@ -147,6 +167,21 @@ try {
 			await page.getByRole('button', { name: '同步价格', exact: true }).click();
 			await page.getByText(/已更新/).waitFor();
 			assert.equal(syncCalls, 1);
+			fixture = {
+				...fixture,
+				models: ['com-aliyun/qwen3.8-max', 'com-aliyun/kimi-k3', 'deepseek-official/deepseek-flash'],
+				config: {
+					...fixture.config,
+					currency: 'CNY',
+					pricing: {
+						'com-aliyun/qwen3.8-max': { input: 2, output: 6, cacheRead: 0.25, cacheWrite: 2.5 },
+						'com-aliyun/kimi-k3': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 },
+						'deepseek-official/deepseek-flash': { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
+					},
+				},
+			};
+			await page.getByRole('button', { name: '重新加载', exact: true }).click();
+			await page.getByRole('heading', { name: 'com-aliyun', exact: true }).waitFor();
 			await page.screenshot({ path: join(home, 'desktop.png'), fullPage: true });
 			await page.setViewportSize({ width: 390, height: 844 });
 			await page.waitForTimeout(300);

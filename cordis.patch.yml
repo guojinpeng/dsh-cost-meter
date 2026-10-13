@@ -1,13 +1,13 @@
 # dsh-cost-meter bundle patch: inserts the cost chip plugin into the profile
 # root as a single entry. All runtime configuration (currency, exchange rate,
 # chip visibility, model price table) lives in
-# <DSH_HOME>/dsh-cost-meter/config.json and is edited from the plugin's detail
+# <DSH_HOME>/guojinpeng/dsh-cost-meter/config.json and is edited from the plugin's detail
 # page in the DSH Plugins UI. Browser requests must be same-origin.
 #
 # `name` is the plugin's own package name, matching the fixture plugins under
-# apps/web/tests/fixtures/plugins/. A third-party plugin keeps its unscoped
+# apps/web/tests/fixtures/plugins/. Use the scoped npm package
 # name: the profile resolves it through the node_modules link `dsh plugin add`
 # creates for the installed package directory.
 - insert:
-  - id: dsh-cost-meter
-    name: 'dsh-cost-meter'
+  - id: guojinpeng/dsh-cost-meter
+    name: '@guojinpeng/dsh-cost-meter'

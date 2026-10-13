@@ -1,60 +1,134 @@
-# dsh-cost-meter
+# @guojinpeng/dsh-cost-meter
 
-DSH session and turn cost estimates from token usage. Requires DSH 0.2.0-rc.2 or later; verified against 0.2.0-rc.2.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## Install From GitHub Release
+This plugin shows estimated session and turn costs in DSH.
+Use DSH 0.2.0-rc.2 or later.
+Tests use DSH 0.2.0-rc.2.
 
-Install DSH 0.2.0-rc.2 or later, download `dsh-cost-meter-0.1.2.tgz` from the
-[GitHub Releases](https://github.com/guojinpeng/dsh-cost-meter/releases) page,
-then run this command from the download directory:
+## Install
+
+1. Install the npm package:
 
 ```powershell
-dsh plugin --profile web add -w ./dsh-cost-meter-0.1.2.tgz
+dsh plugin --profile web add -w @guojinpeng/dsh-cost-meter
 ```
 
-Restart DSH. Replace `web` with your profile name. Keep the downloaded package
-at that path while your profile references it as a local dependency.
+2. Restart DSH.
+3. Open **Plugins**.
+4. Select **@guojinpeng/dsh-cost-meter** to change prices.
 
-## Build From Source
+Replace `web` with your profile name.
+If you used the old unscoped package, disable it before you install this package.
+
+If the npm package is not available, download the scoped package from
+[GitHub Releases](https://github.com/guojinpeng/dsh-cost-meter/releases).
+Run this command in the download directory:
 
 ```powershell
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.2.tgz
+```
+
+Restart DSH.
+Keep the downloaded file at the installation path.
+
+## Features
+
+- Shows session and completed-turn cost estimates.
+- Shows a short initialization message while prices load.
+- Shows input, output, cache-read and cache-write cost details.
+- Groups used models by provider. The list comes from DSH session history.
+- Supports separate prices for each full `provider/model` name.
+- Gets initial prices from models.dev. Uses the local catalog cache first.
+- Syncs only configured models. Asks for confirmation before prices are overwritten.
+- Matches source prices by model ID. Prefers the manufacturer's usage-based price. Keeps existing prices if matching is unclear.
+- Keeps existing prices when the source cannot supply a supported rate.
+- Uses USD per million tokens for model prices. Supports USD and CNY cost display.
+- Updates cost estimates after you save or sync prices.
+- Supports price reset and separate session/turn visibility controls.
+- Stores configuration at `~/.dsh/guojinpeng/dsh-cost-meter/config.json`. Uses `DSH_HOME` when set.
+- Copies the old `~/.dsh/dsh-cost-meter/config.json` on first start if the new file does not exist. Keeps the old file.
+- Uses isolated plugin, client, API, projection, style and configuration identifiers.
+
+These screenshots use example model prices. They do not show a billing statement.
+
+Session cost details:
+
+![Session cost card](docs/images/session-cost.png)
+
+Turn cost details:
+
+![Turn cost card](docs/images/turn-cost.png)
+
+Model price settings:
+
+![Model price settings on desktop](docs/images/model-prices-desktop.png)
+
+## Develop From Source
+
+Install Node.js, pnpm 9 and Git. Install DSH globally before you run the tests:
+
+```powershell
+npm install -g @deepseek-ai/dsh@0.2.0-rc.2
+git clone https://github.com/guojinpeng/dsh-cost-meter.git
+cd dsh-cost-meter
 pnpm install --frozen-lockfile
-npm test
-npm pack
-dsh plugin --profile web add -w ./dsh-cost-meter-0.1.2.tgz
 ```
 
-Restart DSH after installing. Use your actual profile name in place of `web`.
-Tests use the globally installed DSH for peer dependencies. Set `DSH_RUNTIME_ROOT` to its package directory when using a different installation.
+Edit files in `src/`. Run tests and create a package:
 
-## Publish A Release
+```powershell
+npm test
+npm run build
+npm pack
+```
 
-1. Update the version in `package.json` for each new release.
-2. Run `pnpm install --frozen-lockfile`, `npm test`, and `npm pack`.
-3. Commit source, documentation and `pnpm-lock.yaml`; omit `node_modules`, `dist`, local configuration and `.tgz` files.
-4. Push to GitHub and create a tag matching the package version, such as `v0.1.2`.
-5. Create a GitHub Release for the tag and upload the generated `.tgz` as a release asset. Source-only ZIP downloads do not contain the built plugin.
+`npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
+Install the generated file in your DSH profile. For version 0.1.2:
 
-Publishing to npm is optional. The unscoped name `dsh-cost-meter` is already registered;
-confirm ownership before publishing. A scoped package name requires updating the bundle
-patch and client registration identifiers consistently before installation testing.
-Do not publish changed contents under an existing version.
+```powershell
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.2.tgz
+```
 
-## Pricing
+Restart DSH and check the plugin. Repeat the build, package and install steps after changes.
+Tests use the global DSH installation. Set `DSH_RUNTIME_ROOT` to the DSH package directory if its location is different.
+Commit source files and `pnpm-lock.yaml`. Do not commit generated files or local configuration.
 
-- Rates are USD per million tokens, matched by exact `provider/model`. There are no built-in prices or model aliases.
-- Saving or syncing prices immediately recalculates all mounted session and turn chips. While initial pricing or a new model's pricing loads, chips show a lightweight initialization status.
-- Each model is priced separately within a turn. Missing model attribution stays unpriced.
-- The form groups historical models under provider headings, with indented model rows. Configuration keeps full `provider/model` keys. Missing prices initialize from models.dev; unmatched or ambiguous models start at zero. Reset sets all four prices to zero. The model-rate heading displays `USD / 1M tokens`, independent of the cost display currency.
-- On first upgrade, existing bare-model rates migrate to historical routes. The previous configuration is backed up to `config.json.v0.1.1.bak` before migration. Unused price entries are removed after a successful complete history scan.
-- models.dev is the only sync source. The complete API catalog is stored next to config.json at `data/models.dev.json`. First startup initializes the cache. New historical models use the cache first and fetch the API if no valid cache exists. Existing configured prices, including zero, are preserved during initialization.
-- Source matching uses exact model IDs regardless of the local DSH provider. The manufacturer's pay-as-you-go offer is preferred, excluding subscription plans. Otherwise identical unambiguous offers may be used; conflicting offers retain existing prices. `A/model` and `B/model` receive the same selected source price, and users can edit their local rates independently.
-- Sync asks for overwrite confirmation, fetches a fresh catalog, and updates only configured models using USD rates. Unmatched or ambiguous models, tiered or different reasoning rates, and invalid prices retain existing rates. Missing source cache prices retain existing cache prices. Changes made during sync cause a conflict rather than overwriting newer configuration.
-- Configuration lives in `$DSH_HOME/dsh-cost-meter/config.json`, or `~/.dsh/dsh-cost-meter/config.json`.
-- Projection state version 2 rebuilds older caches from session events. Turn disclosures retain roughly the latest 200 turns; session totals cover the full session.
+## Publish To npm
 
-## Configuration Access
+Use an npm account with publish access to `@guojinpeng/dsh-cost-meter`.
+Run these commands in the project directory:
 
-The configuration page requires the DSH browser login cookie and uses DSH's Host/Origin trust checks. Open the authenticated URL printed by DSH. Remote access must also meet the host's binding and trusted-host configuration.
+```powershell
+npm login --registry=https://registry.npmjs.org/
+npm whoami --registry=https://registry.npmjs.org/
+npm view @guojinpeng/dsh-cost-meter version --registry=https://registry.npmjs.org/
+```
 
-The HTTP configuration page requires `sessionQuery`, `webServer` and `connection`. Headless profiles still compute the projection. Desktop configuration access is not verified.
+An unpublished package can return `E404` from `npm view`.
+For an update, choose a version that is newer than the published version.
+Update `package.json`. You can use this command to increase the patch version without creating a Git tag:
+
+```powershell
+npm version patch --no-git-tag-version
+pnpm install --lockfile-only
+npm test
+npm pack --dry-run
+```
+
+Check the file list from `npm pack --dry-run`. Then publish the public package:
+
+```powershell
+npm publish --access public --registry=https://registry.npmjs.org/
+npm view @guojinpeng/dsh-cost-meter version --registry=https://registry.npmjs.org/
+```
+
+Complete npm's authentication steps when prompted.
+Each package version can be published only once.
+Commit and push the version change. Create the matching Git tag and GitHub Release.
+
+Users can then install the package:
+
+```powershell
+dsh plugin --profile web add -w @guojinpeng/dsh-cost-meter
+```

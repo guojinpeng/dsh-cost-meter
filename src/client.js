@@ -1,7 +1,8 @@
 import { buildCostView, RATE_KEYS, zeroRate, parseRouteKey } from './pricing.js';
 import { createConfigStore, buildDraft, configOf } from './client-store.js';
+import { PACKAGE_ID, PLUGIN_ID, PROJECTION_KEY, LOCALE_NAMESPACE } from './identity.js';
 window.__ModuleLoader__.load({
-	id: `dsh-cost-meter`,
+	id: PACKAGE_ID,
 	factory: (e) => {
 		var t = { exports: {} },
 			n = t.exports;
@@ -13,7 +14,7 @@ window.__ModuleLoader__.load({
 		const h = react.createElement;
 		const store = createConfigStore();
 		function useCostView(props) {
-			const raw = props.useProjection('costUsage');
+			const raw = props.useProjection(PROJECTION_KEY);
 			const snapshot = react.useSyncExternalStore(store.subscribe, store.getSnapshot);
 			const loadStatus = react.useSyncExternalStore(store.subscribe, store.getLoadStatus);
 			const missing =
@@ -31,63 +32,63 @@ window.__ModuleLoader__.load({
 				return missing && loadStatus !== 'error' ? { ...view, initializing: true } : view;
 			}, [raw, snapshot, missing, loadStatus]);
 		}
-		const NS = `dshCostMeter`;
+		const NS = LOCALE_NAMESPACE;
 
 		//#region css
-		const CSS_TAG = `dsh-cost-meter/cost-chip.module.css`;
-		const CSS = `:root{--dcc-money:var(--dsw-alias-label-secondary)}
-.dcc_dockRoot{box-sizing:border-box;min-width:0;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));display:inline-flex;justify-content:center;gap:12px}
-.dcc_dockPill{box-sizing:border-box;corner-shape:round;max-width:100%;color:var(--dsw-alias-label-tertiary);font:inherit;font-variant-numeric:tabular-nums;line-height:inherit;white-space:nowrap;background:0 0;border:none;border-radius:999px;align-items:center;gap:6px;padding:1px 8px;display:inline-flex;cursor:pointer}
-.dcc_dockPill svg{flex:none;width:14px;height:14px}
-.dcc_dockPill:hover,.dcc_dockPill[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
-.dcc_dockLabel{text-overflow:ellipsis;min-width:0;overflow:hidden}
-.dcc_money{color:var(--dcc-money);font-variant-numeric:tabular-nums}
-.dcc_turnRoot{min-width:0;display:inline-flex;order:1}
-.dcc_turnTrigger{min-width:0;height:calc(28px + var(--dsh-content-font-delta,0px));border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(24px + var(--dsh-content-font-delta,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;align-items:center;gap:4px;padding:6px 8px;display:inline-flex}
-.dcc_turnLabel{text-overflow:ellipsis;min-width:0;overflow:hidden}
-.dcc_turnTrigger svg{width:calc(15px + var(--dsh-content-font-delta,0px));height:calc(15px + var(--dsh-content-font-delta,0px));flex:none}
-.dcc_turnTrigger:hover,.dcc_turnTrigger[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary)}
-.dcc_initializing{pointer-events:none}
-@media (width<=480px){.dcc_turnTrigger{width:calc(28px + var(--dsh-content-font-delta,0px));justify-content:center;padding:6px}.dcc_turnTrigger .dcc_turnLabel{display:none}}
-.dcc_turnTrigger.dcc_initializing{width:auto}
-.dcc_panel{z-index:1100;box-sizing:border-box;border-radius:var(--dsw-radius-lg);background:var(--dsw-specific-menu);width:max-content;min-width:min(300px,100vw - 24px);max-width:min(440px,100vw - 24px);backdrop-filter:var(--dsw-menu-backdrop-filter);--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-secondary);cursor:default;border:0;padding:16px;font-size:12px;line-height:18px;position:fixed}
-.dcc_title{color:var(--dsw-alias-label-primary);justify-content:space-between;gap:16px;margin-bottom:8px;font-weight:500;display:flex}
-.dcc_titleRule{border-top:.5px solid var(--dsw-alias-border-l2);margin-bottom:10px}
-.dcc_titleValue{font-variant-numeric:tabular-nums}
-.dcc_titleLabel{align-items:center;gap:6px;min-width:0;display:inline-flex}
-.dcc_titleLabel svg{flex:none;width:14px;height:14px}
-.dcc_details{color:var(--dsw-alias-label-tertiary);grid-template-columns:minmax(76px,auto) minmax(0,1fr);gap:6px 16px;margin:0;display:grid}
-.dcc_details dt,.dcc_details dd{min-width:0;margin:0}
-.dcc_details dd{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;text-align:right}
-.dcc_details .dcc_route{overflow-wrap:anywhere}
-.dcc_sub{color:var(--dsw-alias-label-tertiary);margin:12px 0 6px;font-weight:500}
-.dcc_note{color:var(--dsw-alias-label-tertiary);margin-top:10px}
-.dcc_form{border:0;padding:0;margin:0;min-width:0;display:grid;gap:12px;max-width:760px}
-.dcc_fields{display:grid;gap:8px}
-.dcc_field{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1fr);align-items:center;gap:12px}
-.dcc_fieldLabel{color:var(--dsw-alias-label-secondary)}
-.dcc_input{box-sizing:border-box;width:100%;min-width:0;font:inherit;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);padding:4px 8px}
-.dcc_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:not-allowed}
-.dcc_input[type=checkbox]{width:auto;justify-self:start}
-.dcc_rows{display:grid;gap:6px;overflow-x:auto}.dcc_model{overflow-wrap:anywhere}.dcc_row{min-width:620px}.dcc_actions{flex-wrap:wrap}.dcc_ok,.dcc_error{overflow-wrap:anywhere;min-width:0}
-.dcc_row{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(4,minmax(0,1fr)) auto;align-items:center;gap:6px}
-.dcc_rowHead{color:var(--dsw-alias-label-tertiary);font-size:11px}
-.dcc_provider{min-width:620px;margin-top:8px;padding:8px 0 5px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
-.dcc_model{padding-left:12px}
-.dcc_btn{font:inherit;color:var(--dsw-alias-label-secondary);background:0 0;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);padding:3px 10px;cursor:pointer}
-.dcc_btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
-.dcc_btn:disabled{color:var(--dsw-alias-label-tertiary);cursor:not-allowed}
-.dcc_btnPrimary{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2)}
-.dcc_actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
-.dcc_hint{color:var(--dsw-alias-label-tertiary)}
-.dcc_error{color:var(--dsw-alias-label-error,var(--dsw-alias-label-primary))}
-.dcc_ok{color:var(--dsw-alias-label-tertiary)}`;
+		const CSS_TAG = `${PLUGIN_ID}/cost-chip.module.css`;
+		const CSS = `:root{--guojinpeng-cost-money:var(--dsw-alias-label-secondary)}
+.gdcc_dockRoot{box-sizing:border-box;min-width:0;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));display:inline-flex;justify-content:center;gap:12px}
+.gdcc_dockPill{box-sizing:border-box;corner-shape:round;max-width:100%;color:var(--dsw-alias-label-tertiary);font:inherit;font-variant-numeric:tabular-nums;line-height:inherit;white-space:nowrap;background:0 0;border:none;border-radius:999px;align-items:center;gap:6px;padding:1px 8px;display:inline-flex;cursor:pointer}
+.gdcc_dockPill svg{flex:none;width:14px;height:14px}
+.gdcc_dockPill:hover,.gdcc_dockPill[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
+.gdcc_dockLabel{text-overflow:ellipsis;min-width:0;overflow:hidden}
+.gdcc_money{color:var(--guojinpeng-cost-money);font-variant-numeric:tabular-nums}
+.gdcc_turnRoot{min-width:0;display:inline-flex;order:1}
+.gdcc_turnTrigger{min-width:0;height:calc(28px + var(--dsh-content-font-delta,0px));border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(24px + var(--dsh-content-font-delta,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;align-items:center;gap:4px;padding:6px 8px;display:inline-flex}
+.gdcc_turnLabel{text-overflow:ellipsis;min-width:0;overflow:hidden}
+.gdcc_turnTrigger svg{width:calc(15px + var(--dsh-content-font-delta,0px));height:calc(15px + var(--dsh-content-font-delta,0px));flex:none}
+.gdcc_turnTrigger:hover,.gdcc_turnTrigger[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary)}
+.gdcc_initializing{pointer-events:none}
+@media (width<=480px){.gdcc_turnTrigger{width:calc(28px + var(--dsh-content-font-delta,0px));justify-content:center;padding:6px}.gdcc_turnTrigger .gdcc_turnLabel{display:none}}
+.gdcc_turnTrigger.gdcc_initializing{width:auto}
+.gdcc_panel{z-index:1100;box-sizing:border-box;border-radius:var(--dsw-radius-lg);background:var(--dsw-specific-menu);width:max-content;min-width:min(300px,100vw - 24px);max-width:min(440px,100vw - 24px);backdrop-filter:var(--dsw-menu-backdrop-filter);--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-secondary);cursor:default;border:0;padding:16px;font-size:12px;line-height:18px;position:fixed}
+.gdcc_title{color:var(--dsw-alias-label-primary);justify-content:space-between;gap:16px;margin-bottom:8px;font-weight:500;display:flex}
+.gdcc_titleRule{border-top:.5px solid var(--dsw-alias-border-l2);margin-bottom:10px}
+.gdcc_titleValue{font-variant-numeric:tabular-nums}
+.gdcc_titleLabel{align-items:center;gap:6px;min-width:0;display:inline-flex}
+.gdcc_titleLabel svg{flex:none;width:14px;height:14px}
+.gdcc_details{color:var(--dsw-alias-label-tertiary);grid-template-columns:minmax(76px,auto) minmax(0,1fr);gap:6px 16px;margin:0;display:grid}
+.gdcc_details dt,.gdcc_details dd{min-width:0;margin:0}
+.gdcc_details dd{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;text-align:right}
+.gdcc_details .gdcc_route{overflow-wrap:anywhere}
+.gdcc_sub{color:var(--dsw-alias-label-tertiary);margin:12px 0 6px;font-weight:500}
+.gdcc_note{color:var(--dsw-alias-label-tertiary);margin-top:10px}
+.gdcc_form{border:0;padding:0;margin:0;min-width:0;display:grid;gap:12px;max-width:760px}
+.gdcc_fields{display:grid;gap:8px}
+.gdcc_field{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1fr);align-items:center;gap:12px}
+.gdcc_fieldLabel{color:var(--dsw-alias-label-secondary)}
+.gdcc_input{box-sizing:border-box;width:100%;min-width:0;font:inherit;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);padding:4px 8px}
+.gdcc_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:not-allowed}
+.gdcc_input[type=checkbox]{width:auto;justify-self:start}
+.gdcc_rows{display:grid;gap:6px;overflow-x:auto}.gdcc_model{overflow-wrap:anywhere}.gdcc_row{min-width:620px}.gdcc_actions{flex-wrap:wrap}.gdcc_ok,.gdcc_error{overflow-wrap:anywhere;min-width:0}
+.gdcc_row{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(4,minmax(0,1fr)) auto;align-items:center;gap:6px}
+.gdcc_rowHead{color:var(--dsw-alias-label-tertiary);font-size:11px}
+.gdcc_provider{min-width:620px;margin-top:8px;padding:8px 0 5px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
+.gdcc_model{padding-left:12px}
+.gdcc_btn{font:inherit;color:var(--dsw-alias-label-secondary);background:0 0;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);padding:3px 10px;cursor:pointer}
+.gdcc_btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.gdcc_btn:disabled{color:var(--dsw-alias-label-tertiary);cursor:not-allowed}
+.gdcc_btnPrimary{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2)}
+.gdcc_actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.gdcc_hint{color:var(--dsw-alias-label-tertiary)}
+.gdcc_error{color:var(--dsw-alias-label-error,var(--dsw-alias-label-primary))}
+.gdcc_ok{color:var(--dsw-alias-label-tertiary)}`;
 		if (
 			typeof document !== `undefined` &&
 			document.querySelector(`style[data-plugin-css=` + JSON.stringify(CSS_TAG) + `]`) === null
 		) {
 			const tag = document.createElement(`style`);
-			tag.dataset.plugin = `dsh-cost-meter`;
+			tag.dataset.plugin = PACKAGE_ID;
 			tag.dataset.pluginCss = CSS_TAG;
 			tag.textContent = CSS;
 			document.head.appendChild(tag);
@@ -307,7 +308,7 @@ window.__ModuleLoader__.load({
 				const cells = row(item[0], item[1], `r${children.length}`);
 				if (cells !== null) children.push(cells[0], cells[1]);
 			}
-			return h(`dl`, { className: `dcc_details`, key }, children);
+			return h(`dl`, { className: `gdcc_details`, key }, children);
 		}
 
 		/** The floating card shell. */
@@ -315,19 +316,19 @@ window.__ModuleLoader__.load({
 			return reactDom.createPortal(
 				h(`div`, {
 					ref: props.panelRef,
-					className: `dcc_panel`,
+					className: `gdcc_panel`,
 					role: `dialog`,
 					'aria-label': props.title,
 					style: props.pos ?? MEASURE_STYLE,
 					children: [
-						h(`div`, { className: `dcc_title`, key: `title` }, [
-							h(`span`, { className: `dcc_titleLabel`, key: `l` }, [
+						h(`div`, { className: `gdcc_title`, key: `title` }, [
+							h(`span`, { className: `gdcc_titleLabel`, key: `l` }, [
 								h(props.icon, { key: `i` }),
 								h(`span`, { key: `t` }, props.title),
 							]),
-							h(`span`, { className: `dcc_titleValue`, key: `v` }, props.value),
+							h(`span`, { className: `gdcc_titleValue`, key: `v` }, props.value),
 						]),
-						h(`div`, { className: `dcc_titleRule`, key: `rule` }),
+						h(`div`, { className: `gdcc_titleRule`, key: `rule` }),
 						react.Children.toArray(props.children),
 					],
 				}),
@@ -340,10 +341,10 @@ window.__ModuleLoader__.load({
 		function InitializingChip({ t, turn }) {
 			return h(
 				'span',
-				{ className: turn ? 'dcc_turnRoot' : 'dcc_dockRoot', role: 'status', 'aria-busy': true },
+				{ className: turn ? 'gdcc_turnRoot' : 'gdcc_dockRoot', role: 'status', 'aria-busy': true },
 				h(
 					'span',
-					{ className: (turn ? 'dcc_turnTrigger' : 'dcc_dockPill') + ' dcc_initializing', title: t('initializing') },
+					{ className: (turn ? 'gdcc_turnTrigger' : 'gdcc_dockPill') + ' gdcc_initializing', title: t('initializing') },
 					[h(IconGaugeOutlineRegular, { key: 'icon' }), h('span', { key: 'label' }, t('initializing'))],
 				),
 			);
@@ -376,7 +377,7 @@ window.__ModuleLoader__.load({
 				routes.length === 0
 					? null
 					: h(`div`, { key: `routes` }, [
-							h(`div`, { className: `dcc_sub`, key: `h` }, t(`byRoute`)),
+							h(`div`, { className: `gdcc_sub`, key: `h` }, t(`byRoute`)),
 							details(
 								routes.flatMap((entry) => [
 									[
@@ -389,18 +390,18 @@ window.__ModuleLoader__.load({
 								`routes`,
 							),
 						]);
-			return h(`span`, { className: `dcc_dockRoot`, ref: dialog.rootRef }, [
+			return h(`span`, { className: `gdcc_dockRoot`, ref: dialog.rootRef }, [
 				h(
 					`button`,
 					{
 						key: `b`,
 						type: `button`,
-						className: `dcc_dockPill`,
+						className: `gdcc_dockPill`,
 						'aria-haspopup': `dialog`,
 						'aria-expanded': dialog.open,
 						onClick: () => dialog.setOpen(!dialog.open),
 					},
-					[h(IconGaugeOutlineRegular, { key: `i` }), h(`span`, { className: `dcc_dockLabel`, key: `l` }, label)],
+					[h(IconGaugeOutlineRegular, { key: `i` }), h(`span`, { className: `gdcc_dockLabel`, key: `l` }, label)],
 				),
 				dialog.open
 					? panel({
@@ -409,7 +410,7 @@ window.__ModuleLoader__.load({
 							title: t(`sessionTitle`),
 							value: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
 							icon: IconGaugeOutlineRegular,
-							children: [details(items, `main`), routeRows, h(`div`, { className: `dcc_note`, key: `n` }, t(`note`))],
+							children: [details(items, `main`), routeRows, h(`div`, { className: `gdcc_note`, key: `n` }, t(`note`))],
 						})
 					: null,
 			]);
@@ -457,20 +458,20 @@ window.__ModuleLoader__.load({
 				priced ? [t(`cacheWrite`), formatMoney(money.write, view.currency, view.cnyPerUsd)] : null,
 				priced ? [t(`output`), formatMoney(money.output, view.currency, view.cnyPerUsd)] : null,
 			].filter((item) => item !== null);
-			return h(`span`, { className: `dcc_turnRoot`, ref: dialog.rootRef }, [
+			return h(`span`, { className: `gdcc_turnRoot`, ref: dialog.rootRef }, [
 				h(
 					`button`,
 					{
 						key: `b`,
 						type: `button`,
-						className: `dcc_turnTrigger`,
+						className: `gdcc_turnTrigger`,
 						'aria-haspopup': `dialog`,
 						'aria-expanded': dialog.open,
 						onClick: () => dialog.setOpen(!dialog.open),
 					},
 					[
 						h(IconGaugeOutlineRegular, { key: `i` }),
-						h(`span`, { className: `dcc_turnLabel`, key: `l` }, t(`turnCost`, { amount: label })),
+						h(`span`, { className: `gdcc_turnLabel`, key: `l` }, t(`turnCost`, { amount: label })),
 					],
 				),
 				dialog.open
@@ -558,14 +559,14 @@ window.__ModuleLoader__.load({
 
 		//#region config page
 		/** Bundle package name: the plugins.bundle.config key and loader id. */
-		const ENTRY_ID = `dsh-cost-meter`;
+		const ENTRY_ID = PACKAGE_ID;
 		/** One labelled row. */
 		function field(label, control, key) {
 			// `control` is always an element; give it a key of its own so React
 			// does not warn about the keyless child of this two-item array.
 			const value = control === null || control === undefined ? null : react.cloneElement(control, { key: `v` });
-			return h(`div`, { className: `dcc_field`, key }, [
-				h(`span`, { className: `dcc_fieldLabel`, key: `l` }, label),
+			return h(`div`, { className: `gdcc_field`, key }, [
+				h(`span`, { className: `gdcc_fieldLabel`, key: `l` }, label),
 				value,
 			]);
 		}
@@ -574,7 +575,7 @@ window.__ModuleLoader__.load({
 		function numberInput(value, onChange, key) {
 			return h(`input`, {
 				key,
-				className: `dcc_input`,
+				className: `gdcc_input`,
 				type: `number`,
 				step: `any`,
 				value: String(value ?? ``),
@@ -587,7 +588,7 @@ window.__ModuleLoader__.load({
 		 *
 		 * Self-managed persistence: the draft is loaded from and saved to the
 		 * host half's loopback config route, which owns
-		 * `<DSH_HOME>/dsh-cost-meter/config.json`. No settings namespace and no
+		 * `<DSH_HOME>/guojinpeng/dsh-cost-meter/config.json`. No settings namespace and no
 		 * form controller are involved.
 		 */
 		function CostConfigCard(props) {
@@ -613,7 +614,7 @@ window.__ModuleLoader__.load({
 					active = false;
 				};
 			}, []);
-			if (!draft) return h('div', { className: error ? 'dcc_error' : 'dcc_hint' }, error || t('configLoading'));
+			if (!draft) return h('div', { className: error ? 'gdcc_error' : 'gdcc_hint' }, error || t('configLoading'));
 			const dirty = JSON.stringify(draft) !== JSON.stringify(buildDraft(payload));
 			const patch = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
 			const rowPatch = (index, changes) =>
@@ -668,19 +669,19 @@ window.__ModuleLoader__.load({
 			const rows = [...groups].flatMap(([provider, entries]) => [
 				h(
 					'div',
-					{ key: `provider:${provider}`, className: 'dcc_provider', role: 'heading', 'aria-level': 3 },
+					{ key: `provider:${provider}`, className: 'gdcc_provider', role: 'heading', 'aria-level': 3 },
 					provider,
 				),
 				...entries.map(({ row, index, model }) =>
-					h('div', { className: 'dcc_row', key: row.key }, [
-						h('span', { key: 'model', className: 'dcc_model', title: row.key }, model),
+					h('div', { className: 'gdcc_row', key: row.key }, [
+						h('span', { key: 'model', className: 'gdcc_model', title: row.key }, model),
 						...RATE_KEYS.map((key) => numberInput(row[key], (value) => rowPatch(index, { [key]: value }), key)),
 						h(
 							'button',
 							{
 								key: 'reset',
 								type: 'button',
-								className: 'dcc_btn',
+								className: 'gdcc_btn',
 								title: text('价格归零', 'Reset prices to zero'),
 								onClick: () => rowPatch(index, zeroRate()),
 							},
@@ -689,12 +690,12 @@ window.__ModuleLoader__.load({
 					]),
 				),
 			]);
-			return h('fieldset', { className: 'dcc_form', disabled: busy }, [
+			return h('fieldset', { className: 'gdcc_form', disabled: busy }, [
 				field(
 					t('configCurrency'),
 					h(
 						'select',
-						{ className: 'dcc_input', value: draft.currency, onChange: (e) => patch('currency', e.target.value) },
+						{ className: 'gdcc_input', value: draft.currency, onChange: (e) => patch('currency', e.target.value) },
 						['USD', 'CNY'].map((value) => h('option', { key: value, value }, value)),
 					),
 					'currency',
@@ -708,7 +709,7 @@ window.__ModuleLoader__.load({
 					field(
 						t(key === 'showDockChip' ? 'configShowDockChip' : 'configShowTurnChip'),
 						h('input', {
-							className: 'dcc_input',
+							className: 'gdcc_input',
 							type: 'checkbox',
 							checked: draft[key],
 							onChange: (e) => patch(key, e.target.checked),
@@ -716,14 +717,14 @@ window.__ModuleLoader__.load({
 						key,
 					),
 				),
-				h('div', { key: 'pricing', className: 'dcc_sub' }, t('configPricing') + ' (USD / 1M tokens)'),
-				h('div', { key: 'source', className: 'dcc_actions' }, [
+				h('div', { key: 'pricing', className: 'gdcc_sub' }, t('configPricing') + ' (USD / 1M tokens)'),
+				h('div', { key: 'source', className: 'gdcc_actions' }, [
 					h('span', { key: 'from' }, text('从', 'From')),
 					h(
 						'select',
 						{
 							key: 'select',
-							className: 'dcc_input',
+							className: 'gdcc_input',
 							style: { width: 'auto' },
 							'aria-label': text('价格来源', 'Price source'),
 						},
@@ -731,39 +732,39 @@ window.__ModuleLoader__.load({
 					),
 					h(
 						'button',
-						{ key: 'sync', type: 'button', className: 'dcc_btn', disabled: dirty || busy, onClick: () => run(true) },
+						{ key: 'sync', type: 'button', className: 'gdcc_btn', disabled: dirty || busy, onClick: () => run(true) },
 						text('同步价格', 'Sync prices'),
 					),
 				]),
 				dirty
 					? h(
 							'div',
-							{ key: 'dirty', className: 'dcc_hint' },
+							{ key: 'dirty', className: 'gdcc_hint' },
 							text('请先保存修改，再同步价格。', 'Save changes before syncing prices.'),
 						)
 					: null,
-				h('div', { key: 'rows', className: 'dcc_rows' }, [
+				h('div', { key: 'rows', className: 'gdcc_rows' }, [
 					h(
 						'div',
-						{ key: 'head', className: 'dcc_row' },
+						{ key: 'head', className: 'gdcc_row' },
 						['modelName', 'input', 'output', 'cacheRead', 'cacheWrite', ''].map((key) =>
-							h('span', { key, className: 'dcc_rowHead' }, key ? t(key) : ''),
+							h('span', { key, className: 'gdcc_rowHead' }, key ? t(key) : ''),
 						),
 					),
 					...rows,
 				]),
 				draft.rows.length
 					? null
-					: h('div', { key: 'empty', className: 'dcc_hint' }, text('暂无模型调用历史', 'No model call history')),
-				h('div', { key: 'actions', className: 'dcc_actions' }, [
-					error ? h('span', { key: 'error', className: 'dcc_error' }, error) : null,
-					notice ? h('span', { key: 'notice', className: 'dcc_ok' }, notice) : null,
+					: h('div', { key: 'empty', className: 'gdcc_hint' }, text('暂无模型调用历史', 'No model call history')),
+				h('div', { key: 'actions', className: 'gdcc_actions' }, [
+					error ? h('span', { key: 'error', className: 'gdcc_error' }, error) : null,
+					notice ? h('span', { key: 'notice', className: 'gdcc_ok' }, notice) : null,
 					h(
 						'button',
 						{
 							key: 'reload',
 							type: 'button',
-							className: 'dcc_btn',
+							className: 'gdcc_btn',
 							onClick: async () => {
 								setBusy(true);
 								try {
@@ -780,7 +781,7 @@ window.__ModuleLoader__.load({
 					),
 					h(
 						'button',
-						{ key: 'save', type: 'button', className: 'dcc_btn dcc_btnPrimary', onClick: () => run(false) },
+						{ key: 'save', type: 'button', className: 'gdcc_btn gdcc_btnPrimary', onClick: () => run(false) },
 						busy ? t('configSaving') : t('configSave'),
 					),
 				]),
@@ -797,12 +798,12 @@ window.__ModuleLoader__.load({
 		 * @param ctx - client plugin context.
 		 */
 		function apply(ctx) {
-			ctx.effect(() => ctx.locale.register(NS, { zh, en }), `dsh-cost-meter: dictionaries`);
+			ctx.effect(() => ctx.locale.register(NS, { zh, en }), `guojinpeng/dsh-cost-meter: dictionaries`);
 			ctx.slots.inject(`conversation.composer.dock`, () =>
 				ctx.slots.register(
 					{
 						name: `conversation.composer.dock`,
-						id: `dsh-cost-meter-dock`,
+						id: `${PLUGIN_ID}/dock`,
 						order: 10,
 						locale: NS,
 					},
@@ -813,7 +814,7 @@ window.__ModuleLoader__.load({
 				ctx.slots.register(
 					{
 						name: `conversation.chat.assistant-actions`,
-						id: `dsh-cost-meter-turn`,
+						id: `${PLUGIN_ID}/turn`,
 						order: 10,
 						locale: NS,
 					},
@@ -834,7 +835,7 @@ window.__ModuleLoader__.load({
 							CostConfigCard,
 						),
 					),
-				`dsh-cost-meter: bundle config page`,
+				`guojinpeng/dsh-cost-meter: bundle config page`,
 			);
 		}
 		//#endregion

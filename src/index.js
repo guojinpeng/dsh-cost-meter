@@ -2,7 +2,7 @@
  * Cost projection and configuration endpoint for DSH.
  * Store token buckets by model; price session and turn views from live config.
  * Rates are USD per million tokens; wire amounts are rounded micro-USD.
- * Config: <DSH_HOME or ~/.dsh>/dsh-cost-meter/config.json.
+ * Config: <DSH_HOME or ~/.dsh>/guojinpeng/dsh-cost-meter/config.json.
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { normalizeRate, tokensOf, buildCostView } from './pricing.js';
 import { createHistoryModels } from './history.js';
 import { createModelsDev } from './models-dev.js';
+import { PLUGIN_ID, HTTP_BASE, PROJECTION_KEY } from './identity.js';
 import { lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm';
 // The official per-turn fold. Imported rather than re-derived, so a finished turn
 // prices exactly the numbers the built-in usage pill shows. Resolves through the
@@ -23,16 +24,15 @@ import { deriveTurnTokenUsage } from '@deepseek-ai/dsh-token-meter/client';
 export const inject = ['sessionProjections'];
 
 /** Plugin id used in logs. */
-export const name = 'dsh-cost-meter';
+export const name = PLUGIN_ID;
 
 /** The projection key exposed on the wire. */
-const PROJECTION_KEY = 'costUsage';
 
 /** How many finished turns stay addressable by the client. */
 const TURN_RETENTION = 200;
 
 /** Same-origin route carrying the config file (GET reads, POST writes). */
-const CONFIG_ROUTE = '/dsh-cost-meter/config';
+const CONFIG_ROUTE = `${HTTP_BASE}/config`;
 
 /** Upper bound for a POSTed config body. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -61,7 +61,8 @@ function resolveDshHome(env = process.env) {
 }
 
 /** Absolute path of the unified config file. */
-const CONFIG_PATH = join(resolveDshHome(), CONFIG_DIR_NAME, CONFIG_FILE_NAME);
+const CONFIG_PATH = join(resolveDshHome(), 'guojinpeng', CONFIG_DIR_NAME, CONFIG_FILE_NAME);
+const LEGACY_CONFIG_PATH = join(resolveDshHome(), CONFIG_DIR_NAME, CONFIG_FILE_NAME);
 
 /** Coerce any parsed JSON value into a complete configuration object. */
 function normalizeConfig(raw) {
@@ -130,10 +131,15 @@ function writeConfig(config) {
 function seedConfigFile(logger) {
 	try {
 		if (existsSync(CONFIG_PATH)) return;
+		if (existsSync(LEGACY_CONFIG_PATH)) {
+			mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+			copyFileSync(LEGACY_CONFIG_PATH, CONFIG_PATH);
+			return;
+		}
 		writeConfig(normalizeConfig({ formatVersion: 2 }));
 	} catch (error) {
 		logger?.warn(
-			'dsh-cost-meter: could not seed config file',
+			'guojinpeng/dsh-cost-meter: could not seed config file',
 			error instanceof Error ? error : new Error(String(error)),
 		);
 	}
@@ -679,7 +685,7 @@ export function createConfigHandler(connection, history, prices = createModelsDe
 			respond(res, rejection, { error: rejection === 401 ? 'authentication required' : 'forbidden' });
 			return;
 		}
-		const sync = req.url?.split('?')[0] === '/dsh-cost-meter/pricing/sync';
+		const sync = req.url?.split('?')[0] === `${HTTP_BASE}/pricing/sync`;
 		if (req.method === 'GET' || req.method === 'HEAD') {
 			try {
 				respond(res, 200, await configPayload(history));
@@ -754,8 +760,8 @@ export function apply(ctx) {
 		history.config().catch((error) => ctx.logger?.warn('Could not discover historical models', error));
 		queryCtx.inject(['webServer', 'connection'], (webCtx) => {
 			const handler = createConfigHandler(webCtx.connection, history, prices);
-			for (const path of [CONFIG_ROUTE, '/dsh-cost-meter/pricing/sync']) {
-				webCtx.effect(() => webCtx.webServer.register({ kind: 'exact', path, handler }), `dsh-cost-meter: ${path}`);
+			for (const path of [CONFIG_ROUTE, `${HTTP_BASE}/pricing/sync`]) {
+				webCtx.effect(() => webCtx.webServer.register({ kind: 'exact', path, handler }), `guojinpeng/dsh-cost-meter: ${path}`);
 			}
 		});
 	});

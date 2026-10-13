@@ -1,8 +1,8 @@
 {
-  "name": "dsh-cost-meter",
+  "name": "@guojinpeng/dsh-cost-meter",
   "version": "0.1.2",
   "type": "module",
-  "description": "用于DSH聊天界面的会话和每轮成本标签，价格根据@deepseek-ai/dsh-token-meter报告的token用量计算。模型费率位于~/.dsh/dsh-cost-meter/config.json。",
+  "description": "DSH 会话和每轮费用估算插件，支持 models.dev 价格同步与自定义模型单价。配置位于 ~/.dsh/guojinpeng/dsh-cost-meter/config.json。",
   "license": "MIT",
   "keywords": [
     "dsh",
