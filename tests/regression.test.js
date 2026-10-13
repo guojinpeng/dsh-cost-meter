@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import vm from 'node:vm';
 import { test, after } from 'node:test';
 import { Readable } from 'node:stream';
 import { execSync } from 'node:child_process';
 import { buildCostView } from '../src/pricing.js';
 import * as identity from '../src/identity.js';
+import { createUseCostView } from '../src/client/cost-view.js';
+import { createCostDialog } from '../src/client/cost-dialog.js';
+import { createCostChips } from '../src/client/cost-chips.js';
 
 // Resolve peers from the installed DSH without changing the user's profile.
 const runtime =
@@ -18,14 +20,7 @@ const require = createRequire(pathToFileURL(join(runtime, 'package.json')));
 const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-test-'));
 const previousHome = process.env.DSH_HOME;
 process.env.DSH_HOME = home;
-let source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-source = source.replace(
-	/from '(?!node:)([^']+)'/g,
-	(_, name) =>
-		`from '${name.startsWith('.') ? new URL(name, new URL('../src/index.js', import.meta.url)).href : pathToFileURL(require.resolve(name)).href}'`,
-);
-
-const host = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const host = await import('../src/index.js');
 const { HostConnectionService } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection')));
 const connection = {
 	trustedHosts: ['dsh.local:3000'],
@@ -38,28 +33,29 @@ after(() => {
 	rmSync(home, { recursive: true, force: true });
 });
 
-let client, configSnapshot = null, loadStatus = 'idle';
-const clientSource = readFileSync(new URL('../src/client.js', import.meta.url), 'utf8')
-	.replace(/^import .*;$/gm, '')
-	.replace('n.apply = apply;', 'n.useCostView = useCostView; n.InitializingChip = InitializingChip; n.CostTurnAction = CostTurnAction; n.apply = apply;');
-vm.runInNewContext(clientSource, {
-	...identity,
-	createConfigStore: () => ({ getSnapshot: () => configSnapshot, getLoadStatus: () => loadStatus, subscribe: () => () => {} }),
-	buildCostView,
-	window: {
-		__ModuleLoader__: {
-			load: ({ factory }) => {
-				client = factory(() => ({ createElement: (type, props, children) => ({ type, props, children }), useSyncExternalStore: (_, get) => get(), useEffect: () => {}, useMemo: compute => compute() }));
-			},
-		},
-	},
+let configSnapshot = null,
+	loadStatus = 'idle';
+const react = {
+	createElement: (type, props, children) => ({ type, props, children }),
+	useSyncExternalStore: (_, get) => get(),
+	useEffect: () => {},
+	useMemo: (compute) => compute(),
+};
+const useCostView = createUseCostView(react, {
+	getSnapshot: () => configSnapshot,
+	getLoadStatus: () => loadStatus,
+	subscribe: () => () => {},
 });
+const client = { useCostView, ...createCostChips(react, useCostView, createCostDialog(react, {})) };
 
 const rate = (value) => ({ input: value, output: value, cacheRead: value, cacheWrite: value });
 
 test('initializing view clears when pricing loads or fails and supports both chips', () => {
 	const buckets = { uncachedInputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
-	const raw = { accounting: { totals: buckets, byRoute: { 'p/a': buckets }, turns: {}, skippedTurns: 0 }, totalMicros: 0 };
+	const raw = {
+		accounting: { totals: buckets, byRoute: { 'p/a': buckets }, turns: {}, skippedTurns: 0 },
+		totalMicros: 0,
+	};
 	const props = { useProjection: () => raw };
 	assert.equal(client.useCostView(props).initializing, true);
 	for (const turn of [false, true]) {

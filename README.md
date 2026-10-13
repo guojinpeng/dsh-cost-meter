@@ -76,15 +76,16 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.1.3:
+Install the generated file in your DSH profile. For version 0.1.4:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.3.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.4.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.
 Tests use the global DSH installation. Set `DSH_RUNTIME_ROOT` to the DSH package directory if its location is different.
 Commit source files and `pnpm-lock.yaml`. Do not commit generated files or local configuration.
+See [the module guide](docs/architecture.md) for source boundaries and verification commands.
 
 ## Publish To npm
 

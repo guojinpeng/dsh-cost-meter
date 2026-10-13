@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
-const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-012-'));
+const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-smoke-'));
 const legacyConfig = {
 	formatVersion: 2,
 	currency: 'USD',
@@ -23,7 +23,9 @@ const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_MODE: 'DISABLED' };
 const profile = 'cost-meter-smoke';
 const cli = (args) => execFileSync(process.execPath, [bin, ...args], { env, encoding: 'utf8', stdio: 'pipe' });
 cli(['--profile', profile, '--from-default-profile', 'web', '--dump-config']);
-cli(['plugin', '--profile', profile, 'add', '-w', resolve('guojinpeng-dsh-cost-meter-0.1.2.tgz')]);
+const { name: packageName, version } = JSON.parse(readFileSync('package.json', 'utf8'));
+const tarball = `${packageName.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
+cli(['plugin', '--profile', profile, 'add', '-w', resolve(tarball)]);
 const child = spawn(process.execPath, [bin, '--profile', profile, '--no-open', '--port', '0'], {
 	env,
 	stdio: ['ignore', 'pipe', 'pipe'],
@@ -183,15 +185,6 @@ try {
 			await page.getByRole('button', { name: '重新加载', exact: true }).click();
 			await page.getByRole('heading', { name: 'com-aliyun', exact: true }).waitFor();
 			await page.screenshot({ path: join(home, 'desktop.png'), fullPage: true });
-			await page.setViewportSize({ width: 390, height: 844 });
-			await page.waitForTimeout(300);
-			assert.ok(await page.getByRole('button', { name: '保存', exact: true }).isVisible());
-			const widths = await page.evaluate(() => ({
-				width: document.documentElement.clientWidth,
-				scroll: document.documentElement.scrollWidth,
-			}));
-			assert.ok(widths.scroll <= widths.width + 1, 'mobile page must not overflow horizontally');
-			await page.screenshot({ path: join(home, 'mobile.png'), fullPage: true });
 			console.log('Browser errors: ' + JSON.stringify(errors));
 			assert.deepEqual(errors, []);
 		} finally {

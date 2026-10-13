@@ -76,15 +76,16 @@ npm pack
 ```
 
 `npm pack` 也会执行构建，生成 `guojinpeng-dsh-cost-meter-<版本号>.tgz`。
-将生成的文件安装到你的 DSH profile。以 0.1.3 为例：
+将生成的文件安装到你的 DSH profile。以 0.1.4 为例：
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.3.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.4.tgz
 ```
 
 重启 DSH，检查插件。每次修改后，重新构建、打包并安装。
 测试使用全局安装的 DSH。如果安装位置不同，将 `DSH_RUNTIME_ROOT` 设置为 DSH 包目录。
 提交源码和 `pnpm-lock.yaml`。不要提交生成文件或本地配置。
+模块职责、依赖边界和验证命令见[模块维护说明](docs/architecture.md)。
 
 ## 发布到 npm
 
