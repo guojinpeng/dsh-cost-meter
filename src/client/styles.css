@@ -183,7 +183,7 @@
 	min-width: 0;
 	display: grid;
 	gap: 12px;
-	max-width: 760px;
+	max-width: 960px;
 }
 .gdcc_fields {
 	display: grid;
@@ -227,7 +227,7 @@
 	overflow-wrap: anywhere;
 }
 .gdcc_row {
-	min-width: 620px;
+	min-width: 640px;
 }
 .gdcc_actions {
 	flex-wrap: wrap;
@@ -239,7 +239,7 @@
 }
 .gdcc_row {
 	display: grid;
-	grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr)) auto;
+	grid-template-columns: minmax(180px, 2fr) 76px repeat(3, minmax(90px, 1fr)) 28px;
 	align-items: center;
 	gap: 6px;
 }
@@ -248,7 +248,7 @@
 	font-size: 11px;
 }
 .gdcc_provider {
-	min-width: 620px;
+	min-width: 640px;
 	margin-top: 8px;
 	padding: 8px 0 5px;
 	border-bottom: 1px solid var(--dsw-alias-border-l1);
@@ -293,4 +293,141 @@
 }
 .gdcc_ok {
 	color: var(--dsw-alias-label-tertiary);
+}
+.gdcc_saveStatus {
+	min-height: 28px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 12px;
+}
+.gdcc_section {
+	border-bottom: 1px solid var(--dsw-alias-border-l1);
+	padding-bottom: 16px;
+}
+.gdcc_section > summary {
+	cursor: pointer;
+	font-weight: 500;
+	color: var(--dsw-alias-label-primary);
+	padding: 8px 0;
+}
+.gdcc_sectionBody {
+	padding-top: 12px;
+}
+.gdcc_tableToolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+	flex-wrap: wrap;
+}
+.gdcc_syncControls,
+.gdcc_sourceLabel {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.gdcc_syncControls {
+	flex-wrap: wrap;
+}
+.gdcc_sourceLabel {
+	color: var(--dsw-alias-label-secondary);
+	font-size: 12px;
+}
+.gdcc_sourceLabel select {
+	width: 160px;
+}
+.gdcc_syncReport {
+	margin: 0 0 16px;
+	padding-left: 18px;
+	max-height: 180px;
+	overflow: auto;
+	overflow-wrap: anywhere;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 12px;
+}
+.gdcc_tableHead {
+	padding-bottom: 4px;
+}
+.gdcc_modelItem {
+	min-width: 640px;
+	padding: 4px 0;
+}
+.gdcc_modelOptions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 16px 24px;
+	margin: 10px 0 4px 12px;
+	padding: 12px 0;
+	border-top: 1px solid var(--dsw-alias-border-l2);
+}
+.gdcc_option {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	color: var(--dsw-alias-label-secondary);
+	font-size: 12px;
+}
+.gdcc_option > input {
+	width: 180px;
+}
+.gdcc_switch {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	color: var(--dsw-alias-label-secondary);
+	font-size: 12px;
+}
+.gdcc_switch input,
+.gdcc_input[role='switch'] {
+	appearance: none;
+	width: 30px;
+	height: 18px;
+	border-radius: 9px;
+	padding: 2px;
+	background: var(--dsw-alias-bg-base);
+	border: 1px solid var(--dsw-alias-border-l1);
+	cursor: pointer;
+}
+.gdcc_switch input::before,
+.gdcc_input[role='switch']::before {
+	content: '';
+	display: block;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: var(--dsw-alias-label-tertiary);
+	transition: transform 120ms;
+}
+.gdcc_switch input:checked,
+.gdcc_input[role='switch']:checked {
+	background: var(--dsw-alias-label-primary);
+	border-color: var(--dsw-alias-label-primary);
+}
+.gdcc_switch input:checked::before,
+.gdcc_input[role='switch']:checked::before {
+	transform: translateX(12px);
+	background: var(--dsw-alias-bg-base);
+}
+.gdcc_expand {
+	width: 28px;
+	height: 28px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: var(--dsw-radius-sm);
+	color: var(--dsw-alias-label-tertiary);
+	background: transparent;
+	cursor: pointer;
+	font-size: 20px;
+}
+.gdcc_expand:hover {
+	background: var(--dsw-alias-interactive-bg-hover);
+}
+.gdcc_form :focus-visible {
+	outline: 2px solid var(--dsw-alias-label-primary);
+	outline-offset: 2px;
 }

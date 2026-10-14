@@ -3,6 +3,7 @@ import { mkdtempSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { createConfigStore } from '../src/client/config-store.js';
 
 const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-smoke-'));
 const legacyConfig = {
@@ -17,11 +18,16 @@ mkdirSync(join(home, 'dsh-cost-meter'), { recursive: true });
 writeFileSync(join(home, 'dsh-cost-meter', 'config.json'), JSON.stringify(legacyConfig));
 const runtime =
 	process.env.DSH_RUNTIME_ROOT ??
-	join(execFileSync('npm.cmd', ['root', '-g'], { encoding: 'utf8', shell: true }).trim(), '@deepseek-ai', 'dsh');
+	join(
+		execFileSync('npm.cmd', ['root', '-g'], { encoding: 'utf8', shell: true }).trim(),
+		'@deepseek-ai',
+		'dsh',
+	);
 const bin = join(runtime, 'lib', 'bin.js');
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_MODE: 'DISABLED' };
 const profile = 'cost-meter-smoke';
-const cli = (args) => execFileSync(process.execPath, [bin, ...args], { env, encoding: 'utf8', stdio: 'pipe' });
+const cli = (args) =>
+	execFileSync(process.execPath, [bin, ...args], { env, encoding: 'utf8', stdio: 'pipe' });
 cli(['--profile', profile, '--from-default-profile', 'web', '--dump-config']);
 const { name: packageName, version } = JSON.parse(readFileSync('package.json', 'utf8'));
 const tarball = `${packageName.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
@@ -87,18 +93,40 @@ try {
 	const js = await client.text();
 	assert.match(js, /__ModuleLoader__/);
 	assert.doesNotMatch(js, /from\s*["']\.\//, 'client bundle must not depend on inaccessible sibling assets');
-	assert.ok(
+	assert.equal(
 		existsSync(join(home, 'guojinpeng', 'dsh-cost-meter', 'data', 'models.dev.json')),
-		'first startup caches the catalog',
+		false,
+		'first startup does not fetch model prices',
 	);
-	const current = await save.json();
-	const sync = await fetch(origin + '/guojinpeng/dsh-cost-meter/pricing/sync', {
-		method: 'POST',
-		headers,
-		body: JSON.stringify({ source: 'models.dev', revision: current.revision }),
-	});
-	assert.equal(sync.status, 200);
-	assert.deepEqual((await sync.json()).config.pricing, {});
+	await save.json();
+	const liveStore = createConfigStore((path, options = {}) =>
+		fetch(origin + path, { ...options, headers: { ...headers, ...options.headers } }),
+	);
+	await liveStore.load();
+	await liveStore.update({ cnyPerUsd: 7.4 });
+	assert.equal(
+		JSON.parse(readFileSync(join(home, 'guojinpeng', 'dsh-cost-meter', 'config.json'), 'utf8')).cnyPerUsd,
+		7.4,
+		'queued edits work through the real authenticated API',
+	);
+	let current = liveStore.getSnapshot();
+	for (const source of ['models.dev', 'openrouter.ai', 'api.deepinfra.com']) {
+		if (source !== 'models.dev') await liveStore.update({ priceSource: source });
+		current = liveStore.getSnapshot();
+		const sync = await fetch(origin + '/guojinpeng/dsh-cost-meter/pricing/sync', {
+			method: 'POST',
+			headers,
+			body: JSON.stringify({ source, revision: current.revision }),
+		});
+		assert.equal(sync.status, 200);
+		assert.deepEqual((await sync.json()).config.pricing, {});
+		assert.ok(
+			existsSync(join(home, 'guojinpeng', 'dsh-cost-meter', 'data', `${source}.json`)),
+			'manual sync caches model prices',
+		);
+		await liveStore.load();
+	}
+	current = liveStore.getSnapshot();
 	if (process.env.PLAYWRIGHT_MODULE) {
 		const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 		const browser = await chromium.launch({
@@ -107,92 +135,17 @@ try {
 		});
 		try {
 			const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-			const errors = [];
-			page.on('pageerror', (e) => errors.push(e.message));
-			await page.goto(url);
-			await page.waitForTimeout(2000);
-			for (let step = 0; step < 20; step++) {
-				const next = page.getByRole('button', { name: /^(继续|下一步|完成|开始使用|跳过|稍后配置)$/ }).last();
-				if (await next.isVisible()) await next.click();
-				await page.waitForTimeout(500);
-				if (step > 5 && !(await page.locator('[role="dialog"]').count())) break;
-			}
-			await page.getByRole('button', { name: '插件', exact: true }).click();
-			await page.keyboard.press('Escape');
-			await page.waitForTimeout(300);
-			await page.getByText('@guojinpeng/dsh-cost-meter', { exact: true }).first().click();
-			await page.waitForTimeout(1000);
-			await page.getByText('暂无模型调用历史', { exact: true }).waitFor();
-			let fixture = {
-				...current,
-				models: ['A/qwen3.8-max', 'B/a-very-long-model-name-for-responsive-layout-check-20261013'],
-				config: {
-					...current.config,
-					pricing: {
-						'A/qwen3.8-max': { input: 2, output: 6, cacheRead: 0.25, cacheWrite: 2.5 },
-						'B/a-very-long-model-name-for-responsive-layout-check-20261013': {
-							input: 0,
-							output: 0,
-							cacheRead: 0,
-							cacheWrite: 0,
-						},
-					},
-				},
-			};
-			let syncCalls = 0;
-			await page.route('**/guojinpeng/dsh-cost-meter/config', async (route) => {
-				if (route.request().method() === 'POST')
-					fixture = { ...fixture, config: route.request().postDataJSON().config, revision: 'fixture-saved' };
-				await route.fulfill({ json: fixture });
-			});
-			await page.route('**/guojinpeng/dsh-cost-meter/pricing/sync', async (route) => {
-				syncCalls++;
-				await route.fulfill({
-					json: { ...fixture, report: { updated: fixture.models, unmatched: [], unsupported: [], ambiguous: [] } },
-				});
-			});
-			await page.getByRole('button', { name: '重新加载', exact: true }).click();
-			await page.getByText('qwen3.8-max', { exact: true }).waitFor();
-			assert.deepEqual(await page.locator('.gdcc_provider').allTextContents(), ['A', 'B']);
-			assert.equal(await page.locator('.gdcc_model').first().getAttribute('title'), 'A/qwen3.8-max');
-			assert.equal(await page.locator('.gdcc_model small').count(), 0);
-			assert.ok(await page.getByText('模型单价 (USD / 1M tokens)', { exact: true }).isVisible());
-			page.once('dialog', (dialog) => dialog.dismiss());
-			await page.getByRole('button', { name: '同步价格', exact: true }).click();
-			assert.equal(syncCalls, 0);
-			await page.getByTitle('价格归零').first().click();
-			assert.ok(await page.getByRole('button', { name: '同步价格', exact: true }).isDisabled());
-			await page.getByRole('button', { name: '保存', exact: true }).click();
-			await page.getByText('已保存', { exact: true }).waitFor();
-			assert.equal(fixture.config.pricing['A/qwen3.8-max'].input, 0);
-			page.once('dialog', (dialog) => dialog.accept());
-			await page.getByRole('button', { name: '同步价格', exact: true }).click();
-			await page.getByText(/已更新/).waitFor();
-			assert.equal(syncCalls, 1);
-			fixture = {
-				...fixture,
-				models: ['com-aliyun/qwen3.8-max', 'com-aliyun/kimi-k3', 'deepseek-official/deepseek-flash'],
-				config: {
-					...fixture.config,
-					currency: 'CNY',
-					pricing: {
-						'com-aliyun/qwen3.8-max': { input: 2, output: 6, cacheRead: 0.25, cacheWrite: 2.5 },
-						'com-aliyun/kimi-k3': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 0 },
-						'deepseek-official/deepseek-flash': { input: 0.3, output: 1.2, cacheRead: 0.006, cacheWrite: 0 },
-					},
-				},
-			};
-			await page.getByRole('button', { name: '重新加载', exact: true }).click();
-			await page.getByRole('heading', { name: 'com-aliyun', exact: true }).waitFor();
-			await page.screenshot({ path: join(home, 'desktop.png'), fullPage: true });
-			console.log('Browser errors: ' + JSON.stringify(errors));
-			assert.deepEqual(errors, []);
+			const { checkConfigPage } = await import('./browser-config-check.mjs');
+			await checkConfigPage(page, url, current, join(home, 'desktop.png'));
 		} finally {
 			await browser.close();
 		}
 	}
-	console.log('Isolated DSH install/startup, auth, config save, client assets and models.dev sync passed.');
+	console.log(
+		'Isolated DSH install/startup, auth, config save, client assets and all three price sources passed.',
+	);
 	console.log('Isolated test home: ' + home);
 } finally {
-	if (child.exitCode === null) execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+	if (child.exitCode === null)
+		execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
 }

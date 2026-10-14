@@ -37,3 +37,17 @@ export function formatChipMoney(micros, currency, cnyPerUsd) {
 	if (Math.abs(value) < 0.01) return symbol + `<0.01`;
 	return symbol + value.toFixed(2);
 }
+
+/** Values in each group are already expressed in that group's currency. */
+export function formatAmounts(amounts, compact = false) {
+	const format = compact ? formatChipMoney : formatMoney;
+	return (amounts.length ? amounts : [{ currency: 'USD', micros: 0 }])
+		.map((entry) => format(entry.micros, entry.currency, 1))
+		.join(' · ');
+}
+
+export function formatAmountBucket(amounts, field) {
+	return formatAmounts(
+		amounts.map((entry) => ({ currency: entry.currency, micros: entry.bucketMicros[field] })),
+	);
+}

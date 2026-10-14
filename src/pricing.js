@@ -1,5 +1,19 @@
+import { isDeepSeekRoute, pricePeriod } from './time-of-use.js';
+import { PRICE_SOURCES } from './price-sources.js';
+
 export const RATE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite'];
 export const zeroRate = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+export const newRate = (key) => ({ ...zeroRate(), currency: 'USD', autoOffPeak: isDeepSeekRoute(key) });
+
+export function convertRateCurrency(rate, currency, cnyPerUsd) {
+	const previous = rate.currency ?? 'USD';
+	const factor = previous === currency ? 1 : currency === 'CNY' ? cnyPerUsd : 1 / cnyPerUsd;
+	return {
+		...rate,
+		currency,
+		...Object.fromEntries(RATE_KEYS.map((key) => [key, Number((rate[key] * factor).toPrecision(12))])),
+	};
+}
 
 export function normalizeRate(entry) {
 	if (!entry || typeof entry !== 'object') return null;
@@ -9,18 +23,27 @@ export function normalizeRate(entry) {
 		)
 	)
 		return null;
-	return Object.fromEntries(
-		RATE_KEYS.map((key) => [key, Number.isFinite(entry[key]) && entry[key] >= 0 ? entry[key] : 0]),
-	);
+	return {
+		...Object.fromEntries(
+			RATE_KEYS.map((key) => [key, Number.isFinite(entry[key]) && entry[key] >= 0 ? entry[key] : 0]),
+		),
+		...(entry.currency === 'USD' || entry.currency === 'CNY' ? { currency: entry.currency } : {}),
+		...(typeof entry.autoOffPeak === 'boolean' ? { autoOffPeak: entry.autoOffPeak } : {}),
+		...([...PRICE_SOURCES, 'manual'].includes(entry.source) ? { source: entry.source } : {}),
+	};
 }
 
 export function parseRouteKey(key) {
 	const slash = key.indexOf('/');
-	return slash > 0 && slash < key.length - 1 ? { provider: key.slice(0, slash), model: key.slice(slash + 1) } : null;
+	return slash > 0 && slash < key.length - 1
+		? { provider: key.slice(0, slash), model: key.slice(slash + 1) }
+		: null;
 }
 
 export function tokensOf(buckets) {
-	return buckets.uncachedInputTokens + buckets.outputTokens + buckets.cacheReadTokens + buckets.cacheWriteTokens;
+	return (
+		buckets.uncachedInputTokens + buckets.outputTokens + buckets.cacheReadTokens + buckets.cacheWriteTokens
+	);
 }
 
 function wireTokens(buckets) {
@@ -32,42 +55,103 @@ function wireTokens(buckets) {
 	};
 }
 
-function priceRoutes(byRoute, pricing) {
+function priceRoutes(byRoute, config, byTime = {}, calendars = {}) {
 	let micros = 0,
 		unpricedTokens = 0;
 	const bucketMicros = { input: 0, output: 0, read: 0, write: 0 };
-	const routes = [];
+	const routes = [],
+		amounts = new Map();
+	let peakTokens = 0,
+		offPeakTokens = 0,
+		uncertainTokens = 0;
 	for (const [key, buckets] of Object.entries(byRoute)) {
-		const rate = normalizeRate(pricing[key]);
+		const rate = normalizeRate(config.pricing[key]);
 		const totalTokens = tokensOf(buckets);
+		const currency = rate?.currency ?? 'USD';
+		const usdFactor = currency === 'CNY' ? 1 / config.cnyPerUsd : 1;
 		let amount = 0;
 		if (rate === null) unpricedTokens += totalTokens;
 		else {
-			const parts = {
-				input: buckets.uncachedInputTokens * rate.input,
-				output: buckets.outputTokens * rate.output,
-				read: buckets.cacheReadTokens * rate.cacheRead,
-				write: buckets.cacheWriteTokens * rate.cacheWrite,
+			const parts = { input: 0, output: 0, read: 0, write: 0 };
+			const samples =
+				rate.autoOffPeak && isDeepSeekRoute(key)
+					? Object.entries(byTime[key] ?? { unknown: buckets })
+					: [['fixed', buckets]];
+			for (const [time, sample] of samples) {
+				const period = time === 'fixed' ? 'fixed' : pricePeriod(time, calendars);
+				const factor = period === 'offPeak' ? 0.5 : 1;
+				if (period === 'peak') peakTokens += tokensOf(sample);
+				if (period === 'offPeak') offPeakTokens += tokensOf(sample);
+				if (period === 'unknown') uncertainTokens += tokensOf(sample);
+				parts.input += sample.uncachedInputTokens * rate.input * factor;
+				parts.output += sample.outputTokens * rate.output * factor;
+				parts.read += sample.cacheReadTokens * rate.cacheRead * factor;
+				parts.write += sample.cacheWriteTokens * rate.cacheWrite * factor;
+			}
+			amount = Object.values(parts).reduce((sum, value) => sum + value, 0);
+			micros += amount * usdFactor;
+			const group = amounts.get(currency) ?? {
+				currency,
+				micros: 0,
+				bucketMicros: { input: 0, output: 0, read: 0, write: 0 },
 			};
-			amount = Math.round(Object.values(parts).reduce((sum, value) => sum + value, 0));
-			micros += amount;
-			for (const field of Object.keys(parts)) bucketMicros[field] += parts[field];
+			group.micros += amount;
+			for (const field of Object.keys(parts)) {
+				bucketMicros[field] += parts[field] * usdFactor;
+				group.bucketMicros[field] += parts[field];
+			}
+			amounts.set(currency, group);
 		}
-		routes.push({ route: key, micros: amount, totalTokens, priced: rate !== null });
+		routes.push({
+			route: key,
+			currency,
+			amountMicros: Math.round(amount),
+			micros: Math.round(amount * usdFactor),
+			totalTokens,
+			priced: rate !== null,
+		});
 	}
 	for (const key of Object.keys(bucketMicros)) bucketMicros[key] = Math.round(bucketMicros[key]);
-	return { micros, unpricedTokens, bucketMicros, routes };
+	for (const group of amounts.values()) {
+		group.micros = Math.round(group.micros);
+		for (const key of Object.keys(group.bucketMicros))
+			group.bucketMicros[key] = Math.round(group.bucketMicros[key]);
+	}
+	return {
+		micros: Math.round(micros),
+		unpricedTokens,
+		bucketMicros,
+		routes,
+		amounts: [...amounts.values()].sort((a, b) => a.currency.localeCompare(b.currency)),
+		peakTokens,
+		offPeakTokens,
+		uncertainTokens,
+	};
 }
 
 /** The same calculation serves host projections and reactive client displays. */
 export function buildCostView(accounting, config) {
-	const { micros: totalMicros, unpricedTokens, bucketMicros, routes } = priceRoutes(accounting.byRoute, config.pricing);
+	const pricedSession = priceRoutes(accounting.byRoute, config, accounting.byTime, accounting.calendars);
+	const {
+		micros: totalMicros,
+		unpricedTokens,
+		bucketMicros,
+		routes,
+		amounts,
+		peakTokens,
+		offPeakTokens,
+		uncertainTokens,
+	} = pricedSession;
 	routes.sort((a, b) => b.micros - a.micros || b.totalTokens - a.totalTokens);
 	const turns = {};
 	for (const [key, entry] of Object.entries(accounting.turns)) {
-		const priced = priceRoutes(entry.byRoute, config.pricing);
+		const priced = priceRoutes(entry.byRoute, config, entry.byTime, accounting.calendars);
 		turns[key] = {
 			micros: priced.micros,
+			amounts: priced.amounts,
+			peakTokens: priced.peakTokens,
+			offPeakTokens: priced.offPeakTokens,
+			uncertainTokens: priced.uncertainTokens,
 			totalTokens: entry.totalTokens,
 			route: Object.keys(entry.byRoute).join(', '),
 			tokens: wireTokens(entry.tokens),
@@ -78,12 +162,16 @@ export function buildCostView(accounting, config) {
 	}
 	const prompt = tokensOf(accounting.totals) - accounting.totals.outputTokens;
 	return {
-		currency: config.currency,
+		currency: 'USD',
 		cnyPerUsd: config.cnyPerUsd,
 		totalMicros,
 		totalTokens: tokensOf(accounting.totals),
 		tokens: wireTokens(accounting.totals),
 		bucketMicros,
+		amounts,
+		peakTokens,
+		offPeakTokens,
+		uncertainTokens,
 		cacheHitPct: prompt === 0 ? null : Math.round((accounting.totals.cacheReadTokens / prompt) * 1000) / 10,
 		skippedTurns: accounting.skippedTurns,
 		unpricedTokens,

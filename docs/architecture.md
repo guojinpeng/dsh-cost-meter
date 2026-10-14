@@ -15,19 +15,24 @@
 | `server/usage-events.js` | Event fields and token bucket operations / 事件字段读取、压缩、token 分桶和缓存归属恢复 |
 | `server/projection.js` | Session totals, turn settlement, retention and wire-view caching / 会话累计、轮次结算、保留规则和输出缓存 |
 | `server/config-handler.js` | Authentication, HTTP bodies, revisions, save and price sync / HTTP 认证、请求体、revision、保存和价格同步 |
+| `server/holiday-store.js` | Annual holiday-cn downloads and local date caches / holiday-cn 年度下载、日期缓存和并发请求合并 |
+| `server/price-service.js` | Selected price source and independent catalog services / 所选价格来源及独立缓存服务装配 |
+| `price-sources/` | Source adapters, catalog caching, model matching and shared sync / 来源适配、目录缓存、模型匹配和共享同步 |
+| `price-sources.js` | Client-safe source IDs and legacy default / 前后端共用来源标识及旧配置默认值 |
+| `time-of-use.js` | Beijing date/window classification and provider eligibility / 北京时间日期、时段及提供方判断，纯函数 |
 
-`history.js` owns historical model discovery and missing-price initialization. `models-dev.js` owns catalog fetching, disk caching and source price selection. `pricing.js` is shared by server and client; it has no filesystem, HTTP or UI dependencies.
+`history.js` owns historical model discovery and missing-price initialization. `server/price-service.js` selects the source service. `price-sources/` owns fetching, caching and source price conversion. `models-dev.js` preserves the existing models.dev entry point. `pricing.js` is shared by server and client; it has no filesystem, HTTP or UI dependencies.
 
-历史模型发现和初始化仍由 `history.js` 协调，models.dev 的获取、缓存和价格选择仍由 `models-dev.js` 负责。共享计价函数保持纯计算，不引入前后端运行时依赖。
+历史模型发现和初始化由 `history.js` 协调，各来源适配器统一输出 USD / 百万 token 单价。共享同步负责币种转换、模型来源标记和峰谷兼容检查；共享计价函数仍保持纯计算。
 
 ## Client / 前端
 
 | Module | Responsibility / 职责 |
 | --- | --- |
 | `client/plugin.js` | One shared store, locale registration and slots / 创建唯一共享 store，注册语言和插槽 |
-| `client/config-store.js` | Requests, snapshots, subscriptions and response ordering / 请求、快照、订阅和响应顺序保护 |
+| `client/config-store.js` | Requests, serial writes, conflict checks and local refresh / 请求、串行写入、冲突检查和本地状态刷新 |
 | `client/config-draft.js` | Draft conversion and validation / 草稿转换及校验 |
-| `client/config-controller.js` | Load, edit, save, sync, reload and notices / 读取、编辑、保存、同步、重载和提示流程 |
+| `client/config-controller.js` | Draft input, automatic saves, currency changes and sync / 输入草稿、自动保存、币种切换和同步流程 |
 | `client/config-page.js` | Settings page composition / 配置页面装配 |
 | `client/form-controls.js`, `client/pricing-table.js` | Form controls and provider/model price rows / 表单控件和按提供方分组的价格表 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
@@ -42,13 +47,42 @@ The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text
 ## Contracts / 行为约束
 
 - Keep the plugin ID, projection key, locale namespace and slots from `identity.js` unchanged.
-- Keep `GET/HEAD/POST /guojinpeng/dsh-cost-meter/config` and `POST /guojinpeng/dsh-cost-meter/pricing/sync`, response fields and status codes unchanged.
+- Keep the configuration and sync route paths stable. GET can return the local configuration before history discovery finishes; `historyPending` and `calendarPending` request bounded local refreshes while those operations run.
 - Use exact local `provider/model` prices. Third-party price matching uses only the model ID.
-- Keep rounding, retry handling, cache recovery and retention rules unchanged during structural changes.
+- Keep official token/retry folds and turn retention. Projection state version 3 preserves `event.time` and partitions tokens by route, Beijing date and clock window. DSH replays old checkpoint data from the durable log.
 - Keep revision checks and the re-read after network initialization. Manual prices must win over delayed initialization.
 - Keep draft values as strings while editing. Validate and convert them before saving.
-- Keep DOM classes, CSS rule order, chip ordering and money precision stable.
+- Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; legacy `micros` fields remain expressed in USD for compatibility.
 - Preserve current error strings. Error localization is a separate behavior change.
+
+## Pricing And Cache / 价格与缓存
+
+Model entries append optional `currency` and `autoOffPeak` fields. Missing currency means USD; missing off-peak settings preserve fixed legacy rates. New model entries explicitly use USD and enable off-peak pricing only for DeepSeek providers. The old global currency field is retained if present but is not used for display. No new configuration format version or migration step is required.
+
+模型条目追加字段即可，读取旧配置不会补写文件。币种切换转换四项单价并作为一次写入；修改汇率不重写模型单价。源价格始终从 models.dev 的 USD 原始数据计算，已确认的原厂 DeepSeek 谷价先乘以 2。无法确认峰谷口径时保留原价，避免重复折扣。
+
+Only manual price sync downloads a catalog. Missing or broken catalogs do not trigger an automatic request. Initialization uses the selected source's catalog already on disk or keeps zero prices. GET does not wait for a complete history scan; writes reconcile history before revision checks.
+
+`priceSource` selects `models.dev`, `openrouter.ai` or `api.deepinfra.com`; missing values default to models.dev. Each source uses `data/<source>.json`, so existing models.dev caches remain valid. Source selection is saved before sync. Model `source` records the last import, while manual rate edits set it to `manual`; currency conversion preserves provenance. Neither field changes the cost calculation.
+
+OpenRouter converts USD/token strings by multiplying by 1,000,000. DeepInfra converts cents/token by multiplying by 10,000, then applies supported cache multipliers and a valid promotion at import time. Standard service-tier prices are used. Conditional rates are skipped; ambiguous cache-write TTLs preserve the local write price. Bare model IDs use a unique namespace-suffix match, without dropping version or service suffixes. Enabled official DeepSeek off-peak entries require a confirmed peak basis and otherwise keep their prices.
+
+holiday-cn data is stored under `data/holidays/<year>.json`. Files contain holiday/weekend dates and source metadata. Weekends remain off-peak even on adjusted working days. Date and clock buckets stay in the projection, so calendars can reprice past usage without rewriting token counts. The configuration response carries loaded calendars; the shared client store polls the local endpoint only while discovery or calendar requests are pending.
+
+日历缺失时异步获取，不阻塞界面。只对无法确认的工作日高峰窗口暂用高峰价，并在费用明细中记录未确认 token。未知时间不能用当前时间补算。日历到齐后，前端使用原有计费分桶重新计算；不通过大模型调用峰谷工具。
+
+Source references / 数据来源：
+
+- [models.dev catalog / 模型价格接口](https://models.dev/api.json)
+- [OpenRouter model API / 平台报价字段](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties)
+- [DeepInfra API schema / 平台报价接口定义](https://api.deepinfra.com/openapi.json)
+- [DeepInfra cache pricing / 缓存倍率与时长](https://docs.deepinfra.com/chat/prompt-cache-retention)
+- [DeepSeek pricing / 官方峰谷计价规则](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)
+- [holiday-cn / 中国节假日年度数据](https://github.com/NateScarlet/holiday-cn)
+
+`DEEPSEEK_OFF_PEAK_IDS` lists the source model IDs with confirmed off-peak rates. Check the source rate basis before you add an ID. Enabled DeepSeek entries keep their existing prices when that basis cannot be confirmed.
+
+`DEEPSEEK_OFF_PEAK_IDS` 仅列出已确认使用谷价的来源模型 ID。后续增加 ID 前应核对来源价格口径；无法确认时，已开启峰谷的 DeepSeek 条目保留原价。
 
 ## Verify / 验证
 

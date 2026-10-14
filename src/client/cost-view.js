@@ -8,17 +8,25 @@ export function createUseCostView(react, store) {
 		const loadStatus = react.useSyncExternalStore(store.subscribe, store.getLoadStatus);
 		// The server already prices the projection from the local configuration.
 		const missing = snapshot
-			? raw?.accounting && Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key])
+			? raw?.accounting &&
+				Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key])
 			: !raw || raw.unpricedTokens !== 0;
 		react.useEffect(() => {
 			if (
 				!snapshot ||
-				(raw?.accounting && Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key]))
+				(raw?.accounting &&
+					Object.keys(raw.accounting.byRoute).some((key) => key && !snapshot.config.pricing[key]))
 			)
 				store.load().catch(() => {});
 		}, [raw]);
 		return react.useMemo(() => {
-			const view = raw?.accounting && snapshot ? buildCostView(raw.accounting, snapshot.config) : raw;
+			const view =
+				raw?.accounting && snapshot
+					? buildCostView(
+							{ ...raw.accounting, calendars: snapshot.calendars ?? raw.accounting.calendars },
+							snapshot.config,
+						)
+					: raw;
 			return missing && loadStatus !== 'error' ? { ...view, initializing: true } : view;
 		}, [raw, snapshot, missing, loadStatus]);
 	}

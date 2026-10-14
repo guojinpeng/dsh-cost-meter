@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PRICE_SOURCES } from '../price-sources.js';
 
 const int = z.number().int().nonnegative();
 
@@ -10,11 +11,13 @@ const bucketSchema = z
 		cacheWriteTokens: int,
 	})
 	.strict();
+const byTimeSchema = z.record(z.string(), z.record(z.string(), bucketSchema));
+const calendarsSchema = z.record(z.string(), z.array(z.string()));
 
 const routeSchema = z.object({ provider: z.string(), model: z.string() }).strict();
 
 const lastSlotSchema = z
-	.object({ turn: int, step: int, buckets: bucketSchema, route: routeSchema.nullable() })
+	.object({ turn: int, step: int, buckets: bucketSchema, route: routeSchema.nullable(), time: z.string() })
 	.strict();
 
 const turnRecordSchema = z
@@ -22,6 +25,7 @@ const turnRecordSchema = z
 		totalTokens: int,
 		tokens: bucketSchema,
 		byRoute: z.record(z.string(), bucketSchema),
+		byTime: byTimeSchema,
 		recovered: z.boolean(),
 	})
 	.strict();
@@ -31,6 +35,7 @@ export const stateSchema = z
 	.object({
 		totals: bucketSchema,
 		byRoute: z.record(z.string(), bucketSchema),
+		byTime: byTimeSchema,
 		last: lastSlotSchema.nullable(),
 		buffer: z.array(z.any()),
 		bufferTurn: z.number().int().nullable(),
@@ -40,10 +45,17 @@ export const stateSchema = z
 	.strict();
 
 const wireTokensSchema = z.object({ input: int, output: int, read: int, write: int }).strict();
+const amountsSchema = z.array(
+	z.object({ currency: z.enum(['USD', 'CNY']), micros: int, bucketMicros: wireTokensSchema }).strict(),
+);
 
 const wireTurnSchema = z
 	.object({
 		micros: int,
+		amounts: amountsSchema,
+		peakTokens: int,
+		offPeakTokens: int,
+		uncertainTokens: int,
 		totalTokens: int,
 		route: z.string(),
 		tokens: wireTokensSchema,
@@ -53,7 +65,16 @@ const wireTurnSchema = z
 	})
 	.strict();
 
-const wireRouteSchema = z.object({ route: z.string(), micros: int, totalTokens: int, priced: z.boolean() }).strict();
+const wireRouteSchema = z
+	.object({
+		route: z.string(),
+		micros: int,
+		currency: z.enum(['USD', 'CNY']),
+		amountMicros: int,
+		totalTokens: int,
+		priced: z.boolean(),
+	})
+	.strict();
 
 /** Client-facing projection view. */
 export const viewSchema = z
@@ -62,6 +83,8 @@ export const viewSchema = z
 			.object({
 				totals: bucketSchema,
 				byRoute: z.record(z.string(), bucketSchema),
+				byTime: byTimeSchema,
+				calendars: calendarsSchema,
 				turns: z.record(z.string(), turnRecordSchema),
 				skippedTurns: int,
 			})
@@ -72,6 +95,10 @@ export const viewSchema = z
 		totalTokens: int,
 		tokens: wireTokensSchema,
 		bucketMicros: wireTokensSchema,
+		amounts: amountsSchema,
+		peakTokens: int,
+		offPeakTokens: int,
+		uncertainTokens: int,
 		cacheHitPct: z.number().nullable(),
 		skippedTurns: int,
 		unpricedTokens: int,
@@ -88,11 +115,15 @@ const rateSchema = z
 		output: z.number().nonnegative(),
 		cacheRead: z.number().nonnegative(),
 		cacheWrite: z.number().nonnegative(),
+		currency: z.enum(['USD', 'CNY']).optional(),
+		autoOffPeak: z.boolean().optional(),
+		source: z.enum([...PRICE_SOURCES, 'manual']).optional(),
 	})
 	.strict();
 export const configInputSchema = z
 	.object({
-		currency: z.enum(['USD', 'CNY']),
+		currency: z.enum(['USD', 'CNY']).optional(),
+		priceSource: z.enum(PRICE_SOURCES).optional(),
 		cnyPerUsd: z.number().positive(),
 		showDockChip: z.boolean(),
 		showTurnChip: z.boolean(),

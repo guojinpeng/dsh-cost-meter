@@ -109,11 +109,11 @@ export function compactEvent(event) {
 	const type = event?.type;
 	const data = event?.data ?? {};
 	if (type === 'turn/start' || type === 'turn/end') {
-		return typeof data.turn === 'number' ? { type, data: { turn: data.turn } } : null;
+		return typeof data.turn === 'number' ? { type, time: event.time, data: { turn: data.turn } } : null;
 	}
 	if (type === 'step/start' || type === 'step/end' || type === 'llm/retry' || type === 'llm/retry-started') {
 		return typeof data.turn === 'number' && typeof data.step === 'number'
-			? { type, data: { turn: data.turn, step: data.step } }
+			? { type, time: event.time, data: { turn: data.turn, step: data.step } }
 			: null;
 	}
 	if (type !== 'assistant/attempt' && type !== 'assistant/message') return null;
@@ -126,7 +126,7 @@ export function compactEvent(event) {
 	}
 	const sample = streamUsageOf(data.stream);
 	if (sample !== undefined) compact.stream = [{ type: 'chunk', chunk: { type: 'usage', usage: sample } }];
-	return { type, data: compact };
+	return { type, time: event.time, data: compact };
 }
 
 /** Recover missing cache attribution from the official aggregate's prompt total. */

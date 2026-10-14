@@ -1,4 +1,10 @@
-import { formatMoney, formatChipMoney, formatExactTokens } from './format.js';
+import {
+	formatMoney,
+	formatChipMoney,
+	formatExactTokens,
+	formatAmounts,
+	formatAmountBucket,
+} from './format.js';
 
 export function createCostChips(react, useCostView, dialogs) {
 	const h = react.createElement;
@@ -9,7 +15,10 @@ export function createCostChips(react, useCostView, dialogs) {
 			{ className: turn ? 'gdcc_turnRoot' : 'gdcc_dockRoot', role: 'status', 'aria-busy': true },
 			h(
 				'span',
-				{ className: (turn ? 'gdcc_turnTrigger' : 'gdcc_dockPill') + ' gdcc_initializing', title: t('initializing') },
+				{
+					className: (turn ? 'gdcc_turnTrigger' : 'gdcc_dockPill') + ' gdcc_initializing',
+					title: t('initializing'),
+				},
 				[h(IconGaugeOutlineRegular, { key: 'icon' }), h('span', { key: 'label' }, t('initializing'))],
 			),
 		);
@@ -27,14 +36,23 @@ export function createCostChips(react, useCostView, dialogs) {
 		const t = props.t;
 		if (view === undefined || view === null || view.showDock === false) return null;
 		if (view.initializing) return h(InitializingChip, { t });
-		const label = t(`costValue`, { amount: formatChipMoney(view.totalMicros, view.currency, view.cnyPerUsd) });
+		const amount = view.amounts
+			? formatAmounts(view.amounts, true)
+			: formatChipMoney(view.totalMicros, view.currency, view.cnyPerUsd);
+		const label = t(`costValue`, { amount });
 		const buckets = view.bucketMicros ?? { input: 0, output: 0, read: 0, write: 0 };
+		const money = (key) =>
+			view.amounts
+				? formatAmountBucket(view.amounts, key)
+				: formatMoney(buckets[key], view.currency, view.cnyPerUsd);
 		const items = [
-			[t(`input`), formatMoney(buckets.input, view.currency, view.cnyPerUsd)],
-			[t(`cacheRead`), formatMoney(buckets.read, view.currency, view.cnyPerUsd)],
-			[t(`cacheWrite`), formatMoney(buckets.write, view.currency, view.cnyPerUsd)],
-			[t(`output`), formatMoney(buckets.output, view.currency, view.cnyPerUsd)],
+			[t(`input`), money('input')],
+			[t(`cacheRead`), money('read')],
+			[t(`cacheWrite`), money('write')],
+			[t(`output`), money('output')],
 		];
+		for (const key of ['peakTokens', 'offPeakTokens', 'uncertainTokens'])
+			if (view[key] > 0) items.push([t(key), t('count', { count: formatExactTokens(view[key]) })]);
 		if (view.skippedTurns > 0) items.push([t(`skipped`), t(`unpricedValue`, { count: view.skippedTurns })]);
 		if (view.unpricedTokens > 0) items.push([t(`unpriced`), t(`count`, { count: view.unpricedTokens })]);
 		const routes = view.routes ?? [];
@@ -47,7 +65,9 @@ export function createCostChips(react, useCostView, dialogs) {
 							routes.flatMap((entry) => [
 								[
 									entry.route,
-									formatMoney(entry.micros, view.currency, view.cnyPerUsd) +
+									(entry.currency
+										? formatMoney(entry.amountMicros, entry.currency, 1)
+										: formatMoney(entry.micros, view.currency, view.cnyPerUsd)) +
 										`  ·  ` +
 										t(`count`, { count: formatExactTokens(entry.totalTokens) }),
 								],
@@ -66,16 +86,25 @@ export function createCostChips(react, useCostView, dialogs) {
 					'aria-expanded': dialog.open,
 					onClick: () => dialog.setOpen(!dialog.open),
 				},
-				[h(IconGaugeOutlineRegular, { key: `i` }), h(`span`, { className: `gdcc_dockLabel`, key: `l` }, label)],
+				[
+					h(IconGaugeOutlineRegular, { key: `i` }),
+					h(`span`, { className: `gdcc_dockLabel`, key: `l` }, label),
+				],
 			),
 			dialog.open
 				? panel({
 						panelRef: dialog.panelRef,
 						pos: dialog.pos,
 						title: t(`sessionTitle`),
-						value: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
+						value: view.amounts
+							? formatAmounts(view.amounts)
+							: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
 						icon: IconGaugeOutlineRegular,
-						children: [details(items, `main`), routeRows, h(`div`, { className: `gdcc_note`, key: `n` }, t(`note`))],
+						children: [
+							details(items, `main`),
+							routeRows,
+							h(`div`, { className: `gdcc_note`, key: `n` }, t(`note`)),
+						],
 					})
 				: null,
 		]);
@@ -93,7 +122,9 @@ export function createCostChips(react, useCostView, dialogs) {
 		const turn = props.useChat((snapshot) => {
 			const tail = snapshot.nodes
 				.values()
-				.find((node) => node.kind === `turn-tail` && node.data.closing?.finalNode.messageId === props.messageId);
+				.find(
+					(node) => node.kind === `turn-tail` && node.data.closing?.finalNode.messageId === props.messageId,
+				);
 			return tail?.data.turn;
 		});
 		return turn === undefined ? null : h(CostTurnChip, { ...props, turn });
@@ -113,16 +144,26 @@ export function createCostChips(react, useCostView, dialogs) {
 		if (!Number.isSafeInteger(turnNo) || turnNo < 1) return null;
 		const entry = view.turns === undefined ? undefined : view.turns[String(turnNo)];
 		if (entry === undefined) return null;
-		const label = entry.priced ? formatChipMoney(entry.micros, view.currency, view.cnyPerUsd) : t(`noPricing`);
+		const label = entry.priced
+			? entry.amounts
+				? formatAmounts(entry.amounts, true)
+				: formatChipMoney(entry.micros, view.currency, view.cnyPerUsd)
+			: t(`noPricing`);
 		const priced = entry.priced === true;
 		const money = entry.bucketMicros;
+		const bucketMoney = (key) =>
+			entry.amounts
+				? formatAmountBucket(entry.amounts, key)
+				: formatMoney(money[key], view.currency, view.cnyPerUsd);
 		const items = [
 			[t(`model`), entry.route === `` ? null : entry.route],
-			priced ? [t(`input`), formatMoney(money.input, view.currency, view.cnyPerUsd)] : [t(`input`), t(`noPricing`)],
-			priced ? [t(`cacheRead`), formatMoney(money.read, view.currency, view.cnyPerUsd)] : null,
-			priced ? [t(`cacheWrite`), formatMoney(money.write, view.currency, view.cnyPerUsd)] : null,
-			priced ? [t(`output`), formatMoney(money.output, view.currency, view.cnyPerUsd)] : null,
+			priced ? [t(`input`), bucketMoney('input')] : [t(`input`), t(`noPricing`)],
+			priced ? [t(`cacheRead`), bucketMoney('read')] : null,
+			priced ? [t(`cacheWrite`), bucketMoney('write')] : null,
+			priced ? [t(`output`), bucketMoney('output')] : null,
 		].filter((item) => item !== null);
+		for (const key of ['peakTokens', 'offPeakTokens', 'uncertainTokens'])
+			if (entry[key] > 0) items.push([t(key), t('count', { count: formatExactTokens(entry[key]) })]);
 		return h(`span`, { className: `gdcc_turnRoot`, ref: dialog.rootRef }, [
 			h(
 				`button`,
@@ -144,7 +185,9 @@ export function createCostChips(react, useCostView, dialogs) {
 						panelRef: dialog.panelRef,
 						pos: dialog.pos,
 						title: t(`turnTitle`),
-						value: formatMoney(entry.micros, view.currency, view.cnyPerUsd),
+						value: entry.amounts
+							? formatAmounts(entry.amounts)
+							: formatMoney(entry.micros, view.currency, view.cnyPerUsd),
 						icon: IconGaugeOutlineRegular,
 						children: [details(items, `turn`)],
 					})

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { HTTP_BASE } from '../identity.js';
-import { createModelsDev } from '../models-dev.js';
+import { createPriceService } from './price-service.js';
+import { PRICE_SOURCES, resolvedPriceSource } from '../price-sources.js';
 import { CONFIG_PATH } from './config-store.js';
 import { configInputSchema } from './schemas.js';
 
@@ -36,13 +37,22 @@ function readBody(req, limit) {
 
 /** The payload shared by both methods: live config plus auto-fill sources. */
 const revisionOf = (config) => createHash('sha256').update(JSON.stringify(config)).digest('hex');
-async function configPayload(history) {
-	const config = await history.config();
-	return { config, models: history.list(), revision: revisionOf(config), path: CONFIG_PATH };
+async function configPayload(history, holidays, wait = false) {
+	const config = wait || !history.snapshot ? await history.config() : history.snapshot();
+	for (const year of history.years?.() ?? []) holidays?.ensure(year);
+	return {
+		config,
+		models: history.list(),
+		revision: revisionOf(config),
+		path: CONFIG_PATH,
+		...(holidays ? { calendars: holidays.snapshot(), calendarPending: holidays.pending() } : {}),
+		historyPending: history.pending ? history.pending() : history.ready ? !history.ready() : false,
+	};
 }
 
 /** Serve configuration and persist validated JSON writes. */
-export function createConfigHandler(connection, history, prices = createModelsDev()) {
+export function createConfigHandler(connection, history, prices = createPriceService(), holidays) {
+	let writes = Promise.resolve();
 	return async (req, res) => {
 		const rejection = connection.requestRejection(req);
 		if (rejection !== undefined) {
@@ -52,7 +62,7 @@ export function createConfigHandler(connection, history, prices = createModelsDe
 		const sync = req.url?.split('?')[0] === `${HTTP_BASE}/pricing/sync`;
 		if (req.method === 'GET' || req.method === 'HEAD') {
 			try {
-				respond(res, 200, await configPayload(history));
+				respond(res, 200, await configPayload(history, holidays));
 			} catch (error) {
 				respond(res, 503, { error: error.message });
 			}
@@ -70,26 +80,42 @@ export function createConfigHandler(connection, history, prices = createModelsDe
 				respond(res, 400, { error: error instanceof Error ? error.message : String(error) });
 				return;
 			}
-			try {
-				const before = await configPayload(history);
-				if (parsed.revision !== before.revision) {
-					respond(res, 409, { error: 'Configuration changed. Reload before saving.' });
-					return;
-				}
-				let next, report;
-				if (sync) {
-					if (parsed.source !== 'models.dev') throw new Error('Unsupported price source');
-					({ config: next, report } = await prices.prices(before.config));
-					if ((await configPayload(history)).revision !== before.revision) {
-						respond(res, 409, { error: 'Configuration changed during sync. Reload and retry.' });
-						return;
+			const operation = writes
+				.catch(() => {})
+				.then(async () => {
+					try {
+						const before = await configPayload(history, holidays, true);
+						if (parsed.revision !== before.revision) {
+							respond(res, 409, { error: 'Configuration changed. Reload before saving.' });
+							return;
+						}
+						let next, report;
+						if (sync) {
+							if (!PRICE_SOURCES.includes(parsed.source)) {
+								respond(res, 400, { error: 'Unsupported price source' });
+								return;
+							}
+							if (parsed.source !== resolvedPriceSource(before.config)) {
+								respond(res, 409, { error: 'Price source changed. Reload and retry.' });
+								return;
+							}
+							({ config: next, report } = await prices.prices(before.config, parsed.source));
+							if ((await configPayload(history, holidays, true)).revision !== before.revision) {
+								respond(res, 409, { error: 'Configuration changed during sync. Reload and retry.' });
+								return;
+							}
+						} else next = configInputSchema.parse(parsed.config);
+						history.save(next);
+						respond(res, 200, {
+							...(await configPayload(history, holidays, true)),
+							...(report ? { report } : {}),
+						});
+					} catch (error) {
+						respond(res, error instanceof z.ZodError ? 400 : 502, { error: error.message });
 					}
-				} else next = configInputSchema.parse(parsed.config);
-				history.save(next);
-				respond(res, 200, { ...(await configPayload(history)), ...(report ? { report } : {}) });
-			} catch (error) {
-				respond(res, error instanceof z.ZodError ? 400 : 502, { error: error.message });
-			}
+				});
+			writes = operation;
+			await operation;
 			return;
 		}
 		respond(res, 405, { error: 'method not allowed' });

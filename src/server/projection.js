@@ -3,6 +3,7 @@ import { tokensOf, buildCostView } from '../pricing.js';
 import { PROJECTION_KEY } from '../identity.js';
 import { readConfig } from './config-store.js';
 import { stateSchema, viewSchema } from './schemas.js';
+import { timeBucket } from '../time-of-use.js';
 import {
 	zeroBuckets,
 	bucketsFrom,
@@ -23,6 +24,7 @@ function initialState() {
 	return {
 		totals: zeroBuckets(),
 		byRoute: {},
+		byTime: {},
 		last: null,
 		buffer: [],
 		bufferTurn: null,
@@ -58,11 +60,19 @@ function shiftByRoute(byRoute, key, buckets, sign) {
 	return result;
 }
 
+function shiftByTime(byTime, key, time, buckets, sign) {
+	const next = shiftByRoute(byTime[key] ?? {}, time, buckets, sign);
+	const result = { ...byTime, [key]: next };
+	if (!Object.keys(next).length) delete result[key];
+	return result;
+}
+
 /** Append one event to the turn buffer that feeds the official fold. */
 function appendBuffer(state, compact) {
 	if (compact === null) return state;
 	const turn = compact.data.turn;
-	if (state.bufferTurn !== null && turn !== state.bufferTurn) return { ...state, buffer: [compact], bufferTurn: turn };
+	if (state.bufferTurn !== null && turn !== state.bufferTurn)
+		return { ...state, buffer: [compact], bufferTurn: turn };
 	return { ...state, buffer: [...state.buffer, compact], bufferTurn: turn };
 }
 
@@ -81,39 +91,51 @@ function applySample(state, event) {
 	if (typeof turn !== 'number' || typeof step !== 'number') return state;
 	const buckets = bucketsFrom(sample);
 	const route = event.type === 'assistant/message' ? messageRoute(event.data.message) : null;
-	const previous = state.last !== null && state.last.turn === turn && state.last.step === step ? state.last : null;
+	const previous =
+		state.last !== null && state.last.turn === turn && state.last.step === step ? state.last : null;
 	const nextRoute = route ?? previous?.route ?? null;
+	const time = timeBucket(event.time);
 	if (
 		previous !== null &&
 		bucketsEqual(previous.buckets, buckets) &&
-		routeKey(previous.route) === routeKey(nextRoute)
+		routeKey(previous.route) === routeKey(nextRoute) &&
+		previous.time === time
 	) {
 		return state;
 	}
 	let totals = state.totals;
 	let byRoute = state.byRoute;
+	let byTime = state.byTime;
 	if (previous !== null) {
 		totals = bucketsReplace(totals, previous.buckets, buckets);
 		byRoute = shiftByRoute(byRoute, routeKey(previous.route), previous.buckets, -1);
+		byTime = shiftByTime(byTime, routeKey(previous.route), previous.time, previous.buckets, -1);
 	} else {
 		totals = bucketsAdd(totals, buckets);
 	}
 	byRoute = shiftByRoute(byRoute, routeKey(nextRoute), buckets, 1);
+	byTime = shiftByTime(byTime, routeKey(nextRoute), time, buckets, 1);
 	return {
 		...state,
 		totals,
 		byRoute,
-		last: { turn, step, buckets, route: nextRoute },
+		byTime,
+		last: { turn, step, buckets, route: nextRoute, time },
 	};
 }
 
 /** Use the official fold for each attempt, preserving its model attribution. */
 function turnBucketsByRoute(events) {
 	let byRoute = {};
+	let byTime = {};
 	let attempt = [];
 	for (const event of events) {
 		if (event.type === 'step/start' || event.type === 'llm/retry-started') attempt = [];
-		if (event.type === 'assistant/message' || event.type === 'assistant/attempt' || event.type === 'llm/retry') {
+		if (
+			event.type === 'assistant/message' ||
+			event.type === 'assistant/attempt' ||
+			event.type === 'llm/retry'
+		) {
 			attempt.push({ ...event, data: { ...event.data, turn: 1, step: 1 } });
 		}
 		if (event.type !== 'llm/retry' && event.type !== 'step/end') continue;
@@ -128,10 +150,14 @@ function turnBucketsByRoute(events) {
 		if (aggregate !== undefined) {
 			const key = routeKey(aggregate.routes?.[0]);
 			byRoute = shiftByRoute(byRoute, key, recoverBuckets(aggregate).buckets, 1);
+			const settlement =
+				attempt.findLast((item) => item.type === 'assistant/message') ??
+				attempt.findLast((item) => item.type === 'assistant/attempt');
+			byTime = shiftByTime(byTime, key, timeBucket(settlement?.time), recoverBuckets(aggregate).buckets, 1);
 		}
 		attempt = [];
 	}
-	return byRoute;
+	return { byRoute, byTime };
 }
 
 /** Close the buffered turn with the official fold and price it. */
@@ -147,7 +173,7 @@ function settleTurn(state, event) {
 	const entry = {
 		totalTokens: aggregate.totalTokens,
 		tokens: buckets,
-		byRoute: turnBucketsByRoute(state.buffer),
+		...turnBucketsByRoute(state.buffer),
 		recovered,
 	};
 	return {
@@ -178,7 +204,11 @@ function applyToState(state, event) {
 
 	// A retry invalidates the provisional sample of the same attempt.
 	if (type === 'llm/retry-started') {
-		if (sampled.last === null || sampled.last.turn !== event.data?.turn || sampled.last.step !== event.data?.step) {
+		if (
+			sampled.last === null ||
+			sampled.last.turn !== event.data?.turn ||
+			sampled.last.step !== event.data?.step
+		) {
 			return sampled;
 		}
 		return { ...sampled, last: null };
@@ -195,12 +225,12 @@ function applyToState(state, event) {
  * does not, the memo also remembers the configuration signature and rebuilds
  * when it moves.
  */
-export function createCostUsageProjection(readResolvedConfig = readConfig) {
+export function createCostUsageProjection(readResolvedConfig = readConfig, holidays) {
 	const readConfigNow = typeof readResolvedConfig === 'function' ? readResolvedConfig : () => readConfig();
 	const views = new WeakMap();
 	return {
 		key: PROJECTION_KEY,
-		stateVersion: 2,
+		stateVersion: 3,
 		stateSchema,
 		init: () => initialState(),
 		apply: (state, event) => {
@@ -214,12 +244,18 @@ export function createCostUsageProjection(readResolvedConfig = readConfig) {
 			viewSchema,
 			view: (state) => {
 				const resolved = readConfigNow();
-				const signature = configSignature(resolved);
+				for (const times of Object.values(state.byTime))
+					for (const key of Object.keys(times))
+						if (key !== 'unknown') holidays?.ensure(Number(key.slice(0, 4)));
+				const calendars = holidays?.snapshot() ?? {};
+				const signature = configSignature(resolved) + JSON.stringify(calendars);
 				const cached = views.get(state);
 				if (cached !== undefined && cached.signature === signature) return cached.view;
 				const accounting = {
 					totals: state.totals,
 					byRoute: state.byRoute,
+					byTime: state.byTime,
+					calendars,
 					turns: state.turns,
 					skippedTurns: state.skippedTurns,
 				};
@@ -233,5 +269,11 @@ export function createCostUsageProjection(readResolvedConfig = readConfig) {
 
 /** A cheap identity for the configuration values that change the wire view. */
 function configSignature(config) {
-	return JSON.stringify([config.currency, config.cnyPerUsd, config.showDockChip, config.showTurnChip, config.pricing]);
+	return JSON.stringify([
+		config.currency,
+		config.cnyPerUsd,
+		config.showDockChip,
+		config.showTurnChip,
+		config.pricing,
+	]);
 }

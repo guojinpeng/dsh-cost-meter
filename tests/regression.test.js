@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -15,13 +15,17 @@ import { createCostChips } from '../src/client/cost-chips.js';
 
 // Resolve peers from the installed DSH without changing the user's profile.
 const runtime =
-	process.env.DSH_RUNTIME_ROOT ?? join(execSync('npm root -g', { encoding: 'utf8' }).trim(), '@deepseek-ai', 'dsh');
+	process.env.DSH_RUNTIME_ROOT ??
+	join(execSync('npm root -g', { encoding: 'utf8' }).trim(), '@deepseek-ai', 'dsh');
 const require = createRequire(pathToFileURL(join(runtime, 'package.json')));
 const home = mkdtempSync(join(tmpdir(), 'dsh-cost-meter-test-'));
 const previousHome = process.env.DSH_HOME;
 process.env.DSH_HOME = home;
 const host = await import('../src/index.js');
-const { HostConnectionService } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection')));
+const configStore = await import('../src/server/config-store.js');
+const { HostConnectionService } = await import(
+	pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection'))
+);
 const connection = {
 	trustedHosts: ['dsh.local:3000'],
 	browserAuth: { isAuthenticated: (req) => req.headers.cookie === 'test-session' },
@@ -49,6 +53,36 @@ const useCostView = createUseCostView(react, {
 const client = { useCostView, ...createCostChips(react, useCostView, createCostDialog(react, {})) };
 
 const rate = (value) => ({ input: value, output: value, cacheRead: value, cacheWrite: value });
+
+test('existing config is read without rewriting and appended model settings survive reload', () => {
+	const key = 'deepseek-official/deepseek-flash';
+	const original = {
+		formatVersion: 2,
+		currency: 'CNY',
+		cnyPerUsd: 7,
+		showDockChip: true,
+		showTurnChip: true,
+		pricing: { [key]: rate(2) },
+	};
+	configStore.writeConfig(original);
+	const bytes = readFileSync(configStore.CONFIG_PATH, 'utf8');
+	const read = configStore.readConfig(true);
+	assert.deepEqual(read, original);
+	assert.equal(readFileSync(configStore.CONFIG_PATH, 'utf8'), bytes);
+	configStore.writeConfig({
+		...read,
+		priceSource: 'openrouter.ai',
+		pricing: { [key]: { ...rate(14), currency: 'CNY', autoOffPeak: true, source: 'manual' } },
+	});
+	assert.deepEqual(configStore.readConfig(true).pricing[key], {
+		...rate(14),
+		currency: 'CNY',
+		autoOffPeak: true,
+		source: 'manual',
+	});
+	assert.equal(configStore.readConfig(true).priceSource, 'openrouter.ai');
+	assert.equal(configStore.readConfig(true).formatVersion, 2);
+});
 
 test('initializing view clears when pricing loads or fails and supports both chips', () => {
 	configSnapshot = null;
@@ -100,11 +134,20 @@ test('priced server views display session and turn fees before the config reques
 		assert.equal(view.totalMicros, 100 * price);
 		assert.equal(view.turns['1'].micros, 100 * price);
 	}
-	const unpriced = { ...buildCostView(accounting, { currency: 'USD', cnyPerUsd: 7.2, pricing: {} }), accounting };
+	const unpriced = {
+		...buildCostView(accounting, { currency: 'USD', cnyPerUsd: 7.2, pricing: {} }),
+		accounting,
+	};
 	assert.equal(client.useCostView({ useProjection: () => unpriced }).initializing, true);
 	loadStatus = 'idle';
 });
-const usage = { inputTokens: 100, outputTokens: 100, totalTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 };
+const usage = {
+	inputTokens: 100,
+	outputTokens: 100,
+	totalTokens: 200,
+	cacheReadTokens: 0,
+	cacheWriteTokens: 0,
+};
 const event = (type, data = {}) => ({ type, data: { turn: 1, ...data } });
 function step(number, model, sample = usage) {
 	return [
@@ -137,6 +180,194 @@ test('multiple models and live prices agree for session and turn', () => {
 	const changed = projection.wire.view(state);
 	assert.equal(changed.totalMicros, 2400);
 	assert.equal(changed.turns['1'].micros, 2400);
+});
+
+test('timestamp replacement moves usage between periods without counting tokens twice', () => {
+	const config = {
+		cnyPerUsd: 7,
+		pricing: { 'deepseek-official/deepseek-flash': { ...rate(2), currency: 'CNY', autoOffPeak: true } },
+	};
+	const projection = host.createCostUsageProjection(() => config, {
+		ensure: () => {},
+		snapshot: () => ({ 2026: ['2026-10-01'] }),
+	});
+	let state = projection.init();
+	const stamped = (type, data, clock) => ({
+		...event(type, data),
+		time: Date.parse(`2026-10-14T${clock}+08:00`),
+	});
+	state = projection.apply(state, stamped('turn/start', {}, '11:59:00'));
+	state = projection.apply(state, stamped('step/start', { step: 1 }, '11:59:00'));
+	state = projection.apply(
+		state,
+		stamped(
+			'assistant/message',
+			{ step: 1, usage, message: { source: { provider: 'deepseek-official', model: 'deepseek-flash' } } },
+			'11:59:59',
+		),
+	);
+	assert.equal(projection.wire.view(state).amounts[0].micros, 400);
+	state = projection.apply(
+		state,
+		stamped(
+			'assistant/message',
+			{ step: 1, usage, message: { source: { provider: 'deepseek-official', model: 'deepseek-flash' } } },
+			'12:00:00',
+		),
+	);
+	assert.equal(projection.wire.view(state).totalTokens, 200);
+	assert.equal(projection.wire.view(state).amounts[0].micros, 200);
+	// A completed turn uses a single durable settlement, as in a real DSH log.
+	state = projection.init();
+	for (const sample of [
+		stamped('turn/start', {}, '11:59:00'),
+		stamped('step/start', { step: 1 }, '11:59:00'),
+		stamped(
+			'assistant/message',
+			{ step: 1, usage, message: { source: { provider: 'deepseek-official', model: 'deepseek-flash' } } },
+			'12:00:00',
+		),
+	])
+		state = projection.apply(state, sample);
+	state = projection.apply(state, stamped('step/end', { step: 1 }, '12:00:00'));
+	state = projection.apply(state, stamped('turn/end', {}, '12:00:00'));
+	const view = projection.wire.view(state);
+	assert.equal(view.totalTokens, 200);
+	assert.equal(view.amounts[0].micros, 200);
+	assert.equal(view.turns['1'].amounts[0].micros, 200);
+	assert.equal(view.offPeakTokens, 200);
+	assert.equal(view.peakTokens, 0);
+	host.stateSchema.parse(state);
+});
+
+test('configuration GET displays local prices while history discovery is still running', async () => {
+	const req = Readable.from([]);
+	Object.assign(req, {
+		method: 'GET',
+		headers: { host: 'dsh.local:3000', cookie: 'test-session' },
+		url: '/guojinpeng/dsh-cost-meter/config',
+	});
+	let payload;
+	await host.createConfigHandler(connection, {
+		config: async () => {
+			throw new Error('GET must not wait for history');
+		},
+		snapshot: () => ({ currency: 'CNY', cnyPerUsd: 7, pricing: { 'p/a': rate(3) } }),
+		list: () => ['p/a'],
+		ready: () => false,
+	})(req, {
+		writeHead: (status) => assert.equal(status, 200),
+		end: (value) => {
+			payload = JSON.parse(value);
+		},
+	});
+	assert.equal(payload.config.pricing['p/a'].input, 3);
+	assert.equal(payload.historyPending, true);
+});
+
+test('one handler serializes concurrent writes and rejects the stale revision', async () => {
+	let config = { cnyPerUsd: 7, showDockChip: true, showTurnChip: true, pricing: { 'p/a': rate(2) } };
+	const handler = host.createConfigHandler(connection, {
+		config: async () => config,
+		list: () => ['p/a'],
+		save: (value) => {
+			config = value;
+		},
+	});
+	async function send(method, body) {
+		const req = Readable.from(body ? [Buffer.from(JSON.stringify(body))] : []);
+		Object.assign(req, {
+			method,
+			url: '/guojinpeng/dsh-cost-meter/config',
+			headers: {
+				host: 'dsh.local:3000',
+				cookie: 'test-session',
+				origin: 'http://dsh.local:3000',
+				'content-type': 'application/json',
+			},
+		});
+		let status, payload;
+		await handler(req, {
+			writeHead: (value) => {
+				status = value;
+			},
+			end: (value) => {
+				payload = JSON.parse(value);
+			},
+		});
+		return { status, payload };
+	}
+	const { payload: before } = await send('GET');
+	const first = { ...config, cnyPerUsd: 8 },
+		second = { ...config, cnyPerUsd: 9 };
+	const results = await Promise.all([
+		send('POST', { revision: before.revision, config: first }),
+		send('POST', { revision: before.revision, config: second }),
+	]);
+	assert.deepEqual(
+		results.map(({ status }) => status),
+		[200, 409],
+	);
+	assert.equal(config.cnyPerUsd, 8);
+});
+
+test('price sync accepts only the configured source and never fetches an arbitrary URL', async () => {
+	let config = {
+		cnyPerUsd: 7,
+		priceSource: 'openrouter.ai',
+		showDockChip: true,
+		showTurnChip: true,
+		pricing: { 'p/a': rate(2) },
+	};
+	const calls = [];
+	const handler = host.createConfigHandler(
+		connection,
+		{
+			config: async () => config,
+			list: () => ['p/a'],
+			save: (value) => {
+				config = value;
+			},
+		},
+		{
+			prices: async (value, source) => {
+				calls.push(source);
+				return { config: value, report: {} };
+			},
+		},
+	);
+	async function send(method, body) {
+		const req = Readable.from(body ? [Buffer.from(JSON.stringify(body))] : []);
+		Object.assign(req, {
+			method,
+			url: '/guojinpeng/dsh-cost-meter/pricing/sync',
+			headers: {
+				host: 'dsh.local:3000',
+				cookie: 'test-session',
+				origin: 'http://dsh.local:3000',
+				'content-type': 'application/json',
+			},
+		});
+		let status, payload;
+		await handler(req, {
+			writeHead: (value) => {
+				status = value;
+			},
+			end: (value) => {
+				payload = JSON.parse(value);
+			},
+		});
+		return { status, payload };
+	}
+	const { payload: before } = await send('GET');
+	assert.equal(
+		(await send('POST', { revision: before.revision, source: 'https://untrusted.example' })).status,
+		400,
+	);
+	assert.equal((await send('POST', { revision: before.revision, source: 'models.dev' })).status, 409);
+	assert.deepEqual(calls, []);
+	assert.equal((await send('POST', { revision: before.revision, source: 'openrouter.ai' })).status, 200);
+	assert.deepEqual(calls, ['openrouter.ai']);
 });
 
 test('unknown models stay unpriced and become priced after configuration', () => {
@@ -233,14 +464,17 @@ test('authenticated remote config works; cross-origin and non-JSON writes fail',
 			await request(
 				'POST',
 				headers,
-				JSON.stringify({ revision: initial.payload.revision, config: { ...saved, pricing: { 'p/a': rate(2) } } }),
+				JSON.stringify({
+					revision: initial.payload.revision,
+					config: { ...saved, pricing: { 'p/a': rate(2) } },
+				}),
 			)
 		).status,
 		200,
 	);
 	assert.equal(
-		(await request('GET', { host: headers.host, 'sec-fetch-site': 'same-origin', cookie: headers.cookie })).payload
-			.config.pricing['p/a'].input,
+		(await request('GET', { host: headers.host, 'sec-fetch-site': 'same-origin', cookie: headers.cookie }))
+			.payload.config.pricing['p/a'].input,
 		2,
 	);
 	assert.equal((await request('GET', { host: headers.host })).status, 401);
@@ -259,12 +493,19 @@ test('concurrent config edits during sync and network failure do not overwrite p
 	};
 	const before = (await request('GET', headers)).payload;
 	const syncBody = JSON.stringify({ revision: before.revision, source: 'models.dev' });
-	const conflict = await request('POST', headers, syncBody, undefined, '/guojinpeng/dsh-cost-meter/pricing/sync', {
-		prices: async (config) => {
-			saved = { ...saved, cnyPerUsd: 8 };
-			return { config: { ...config, cnyPerUsd: 9 }, report: {} };
+	const conflict = await request(
+		'POST',
+		headers,
+		syncBody,
+		undefined,
+		'/guojinpeng/dsh-cost-meter/pricing/sync',
+		{
+			prices: async (config) => {
+				saved = { ...saved, cnyPerUsd: 8 };
+				return { config: { ...config, cnyPerUsd: 9 }, report: {} };
+			},
 		},
-	});
+	);
 	assert.equal(conflict.status, 409);
 	assert.equal(saved.cnyPerUsd, 8);
 	const current = (await request('GET', headers)).payload;

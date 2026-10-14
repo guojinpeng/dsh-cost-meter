@@ -1,11 +1,12 @@
 import { copyFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHistoryModels } from './history.js';
-import { createModelsDev } from './models-dev.js';
+import { createPriceService } from './server/price-service.js';
 import { PLUGIN_ID, HTTP_BASE } from './identity.js';
 import { CONFIG_PATH, readConfig, writeConfig, seedConfigFile } from './server/config-store.js';
 import { createCostUsageProjection } from './server/projection.js';
 import { createConfigHandler } from './server/config-handler.js';
+import { createHolidayStore } from './server/holiday-store.js';
 
 export { readConfig } from './server/config-store.js';
 export { stateSchema, viewSchema } from './server/schemas.js';
@@ -22,10 +23,14 @@ const CONFIG_ROUTE = `${HTTP_BASE}/config`;
  */
 export function apply(ctx) {
 	seedConfigFile(ctx.logger);
-	ctx.sessionProjections.register(createCostUsageProjection());
+	const holidays = createHolidayStore(join(dirname(CONFIG_PATH), 'data', 'holidays'), undefined, (error) =>
+		ctx.logger?.warn('Could not load holiday calendar', error),
+	);
+	holidays.ensure(new Date(Date.now() + 8 * 3600000).getUTCFullYear());
+	ctx.sessionProjections.register(createCostUsageProjection(readConfig, holidays));
 	// Headless profiles still get the projection; HTTP requires browser auth.
 	ctx.inject(['sessionQuery'], (queryCtx) => {
-		const prices = createModelsDev(undefined, join(dirname(CONFIG_PATH), 'data', 'models.dev.json'));
+		const prices = createPriceService(join(dirname(CONFIG_PATH), 'data'));
 		const history = createHistoryModels(queryCtx.sessionQuery, {
 			readConfig,
 			writeConfig,
@@ -41,7 +46,7 @@ export function apply(ctx) {
 		});
 		history.config().catch((error) => ctx.logger?.warn('Could not discover historical models', error));
 		queryCtx.inject(['webServer', 'connection'], (webCtx) => {
-			const handler = createConfigHandler(webCtx.connection, history, prices);
+			const handler = createConfigHandler(webCtx.connection, history, prices, holidays);
 			for (const path of [CONFIG_ROUTE, `${HTTP_BASE}/pricing/sync`]) {
 				webCtx.effect(
 					() => webCtx.webServer.register({ kind: 'exact', path, handler }),

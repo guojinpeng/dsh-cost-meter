@@ -27,30 +27,44 @@ GitHub contains the source code and release notes.
 ## Features
 
 - Shows session and completed-turn cost estimates.
-- Shows a short initialization message while prices load.
+- Shows a short initialization message when model prices are not ready.
 - Shows input, output, cache-read and cache-write cost details.
 - Groups used models by provider. The list comes from DSH session history.
 - Supports separate prices for each full `provider/model` name.
-- Gets initial prices from models.dev. Uses the local catalog cache first.
+- Selects models.dev, openrouter.ai or api.deepinfra.com as the price source.
+- Initializes new model prices from the selected source's local cache. Uses zero if there is no matching price.
+- Downloads model prices only when you select **Sync prices**.
 - Syncs only configured models. Asks for confirmation before prices are overwritten.
-- Matches source prices by model ID. Prefers the manufacturer's usage-based price. Keeps existing prices if matching is unclear.
+- Matches source prices by model ID. models.dev prefers manufacturer prices; OpenRouter and DeepInfra supply their own platform prices. Keeps existing prices if matching is unclear.
 - Keeps existing prices when the source cannot supply a supported rate.
-- Uses USD per million tokens for model prices. Supports USD and CNY cost display.
-- Updates cost estimates after you save or sync prices.
-- Supports price reset and separate session/turn visibility controls.
+- Supports USD or CNY for each model. Converts all four rates when you change its currency.
+- Shows separate USD and CNY totals when a session or turn uses both currencies.
+- Saves valid changes automatically, in order. Keeps unfinished input and shows save errors.
+- Shows basic settings first. Advanced settings contain the exchange rate and session/turn visibility controls.
+- Puts cache-write prices and DeepSeek peak/off-peak controls in each model's advanced settings.
+- Applies half the peak rate outside Beijing weekday hours 09:00–12:00 and 14:00–18:00, and on weekends and Chinese public holidays.
+- Uses holiday-cn annual calendars, cached under `data/holidays/`. Fetches a missing year in the background.
 - Stores configuration at `~/.dsh/guojinpeng/dsh-cost-meter/config.json`. Uses `DSH_HOME` when set.
 - Copies the old `~/.dsh/dsh-cost-meter/config.json` on first start if the new file does not exist. Keeps the old file.
 - Uses isolated plugin, client, API, projection, style and configuration identifiers.
 
 These screenshots use example model prices. They do not show a billing statement.
 
+Existing model prices without a currency remain USD. Existing DeepSeek entries without a peak/off-peak setting keep fixed rates until you sync them or enable the setting. Confirmed original-vendor DeepSeek off-peak rates from models.dev are multiplied by two to store peak rates. The setting is enabled by default for new DeepSeek provider entries, not for DeepSeek models from other providers.
+
+The configuration file stays at the same path. No configuration migration is required. Historical usage is replayed to restore dates and time windows. Requests that cross a price boundary are estimated from the recorded usage settlement time. If a holiday calendar is unavailable, uncertain weekday windows use the peak rate until the calendar is loaded.
+
+`priceSource` selects the cache for new models. Existing configuration without this field uses models.dev. Each model's `source` records its last price import; edits to rates on the configuration page set it to `manual`. Changing the selected source does not change existing rates or fetch prices. Cost calculation uses only the saved rates.
+
+Caches are separate: `data/models.dev.json`, `data/openrouter.ai.json` and `data/api.deepinfra.com.json`. OpenRouter and DeepInfra prices are not multiplied by two. Entries with automatic DeepSeek off-peak pricing keep their rates when the source cannot confirm an official peak rate. Sync reports show skipped models and cache-write rates that were kept because the cache duration is unclear. Conditional prices and non-token charges are outside this fixed-rate estimate.
+
 Session cost details:
 
-![Session cost card](docs/images/session-cost.png)
+![Session cost card](docs/images/session-cost-en.png)
 
 Turn cost details:
 
-![Turn cost card](docs/images/turn-cost.png)
+![Turn cost card](docs/images/turn-cost-en.png)
 
 Model price settings:
 
@@ -76,10 +90,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.1.5:
+Install the generated file in your DSH profile. For version 0.2.0:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.1.5.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.2.0.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.

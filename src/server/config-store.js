@@ -1,7 +1,16 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+	writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { normalizeRate } from '../pricing.js';
+import { PRICE_SOURCES, DEFAULT_PRICE_SOURCE } from '../price-sources.js';
 
 const STAT_INTERVAL_MS = 1000;
 
@@ -30,8 +39,7 @@ const LEGACY_CONFIG_PATH = join(resolveDshHome(), CONFIG_DIR_NAME, CONFIG_FILE_N
 /** Coerce any parsed JSON value into a complete configuration object. */
 function normalizeConfig(raw) {
 	const source = raw !== null && typeof raw === 'object' ? raw : {};
-	const currency =
-		typeof source.currency === 'string' && source.currency.trim() !== '' ? source.currency.trim() : 'CNY';
+	const currency = source.currency === 'USD' || source.currency === 'CNY' ? source.currency : undefined;
 	const cnyPerUsd = Number(source.cnyPerUsd);
 	const pricing = {};
 	const rawPricing = source.pricing !== null && typeof source.pricing === 'object' ? source.pricing : {};
@@ -43,7 +51,8 @@ function normalizeConfig(raw) {
 	}
 	return {
 		formatVersion: source.formatVersion === 2 ? 2 : 1,
-		currency,
+		...(currency ? { currency } : {}),
+		...(PRICE_SOURCES.includes(source.priceSource) ? { priceSource: source.priceSource } : {}),
 		cnyPerUsd: Number.isFinite(cnyPerUsd) && cnyPerUsd > 0 ? cnyPerUsd : 7.2,
 		showDockChip: source.showDockChip !== false,
 		showTurnChip: source.showTurnChip !== false,
@@ -62,7 +71,12 @@ export function readConfig(force = false) {
 	lastStatAt = now;
 	try {
 		const stats = statSync(CONFIG_PATH);
-		if (!force && configCache !== null && stats.mtimeMs === configCache.mtimeMs && stats.size === configCache.size) {
+		if (
+			!force &&
+			configCache !== null &&
+			stats.mtimeMs === configCache.mtimeMs &&
+			stats.size === configCache.size
+		) {
 			return configCache.config;
 		}
 		const parsed = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
@@ -99,7 +113,7 @@ export function seedConfigFile(logger) {
 			copyFileSync(LEGACY_CONFIG_PATH, CONFIG_PATH);
 			return;
 		}
-		writeConfig(normalizeConfig({ formatVersion: 2 }));
+		writeConfig(normalizeConfig({ formatVersion: 2, priceSource: DEFAULT_PRICE_SOURCE }));
 	} catch (error) {
 		logger?.warn(
 			'guojinpeng/dsh-cost-meter: could not seed config file',

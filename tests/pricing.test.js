@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createConfigStore, buildDraft, configOf } from '../src/client-store.js';
 import { createHistoryModels } from '../src/history.js';
-import { buildCostView, zeroRate } from '../src/pricing.js';
+import { buildCostView, zeroRate, newRate } from '../src/pricing.js';
 import { syncModelsDev, createModelsDev } from '../src/models-dev.js';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,11 +16,18 @@ const config = () => ({
 	showTurnChip: true,
 	pricing: {},
 });
-const event = (provider, model) => ({ type: 'assistant/message', data: { message: { source: { provider, model } } } });
+const event = (provider, model) => ({
+	type: 'assistant/message',
+	data: { message: { source: { provider, model } } },
+});
 const response = (payload, ok = true) => ({ ok, json: async () => payload });
 
 test('history migration preserves old prices; missing and newly observed routes persist zero', async () => {
-	let stored = { ...config(), formatVersion: 1, pricing: { a: { ...zeroRate(), input: 2 }, unused: zeroRate() } },
+	let stored = {
+			...config(),
+			formatVersion: 1,
+			pricing: { a: { ...zeroRate(), input: 2 }, unused: zeroRate() },
+		},
 		backups = 0;
 	const history = createHistoryModels(
 		{
@@ -40,12 +47,12 @@ test('history migration preserves old prices; missing and newly observed routes 
 	assert.equal(backups, 1);
 	assert.deepEqual(Object.keys(stored.pricing), ['p/a', 'p/b']);
 	assert.equal(stored.pricing['p/a'].input, 2);
-	assert.deepEqual(stored.pricing['p/b'], zeroRate());
+	assert.deepEqual(stored.pricing['p/b'], newRate('p/b'));
 	delete stored.pricing['p/a'];
 	await history.config();
-	assert.deepEqual(stored.pricing['p/a'], zeroRate());
+	assert.deepEqual(stored.pricing['p/a'], newRate('p/a'));
 	await history.observe(event('p', 'c'));
-	assert.deepEqual(stored.pricing['p/c'], zeroRate());
+	assert.deepEqual(stored.pricing['p/c'], newRate('p/c'));
 });
 
 test('failed history scan does not prune config and can be retried', async () => {
@@ -79,7 +86,12 @@ test('sync updates only configured exact routes and preserves absent cache rates
 	const previous = { ...zeroRate(), cacheRead: 8, cacheWrite: 9 };
 	const source = {
 		...config(),
-		pricing: { 'custom/a': previous, 'custom/a-prime': previous, 'custom/tier': previous, 'custom/bad': previous },
+		pricing: {
+			'custom/a': previous,
+			'custom/a-prime': previous,
+			'custom/tier': previous,
+			'custom/bad': previous,
+		},
 	};
 	const result = syncModelsDev(source, {
 		alibaba: {
@@ -92,12 +104,24 @@ test('sync updates only configured exact routes and preserves absent cache rates
 		},
 	});
 	assert.deepEqual(Object.keys(result.config.pricing), Object.keys(source.pricing));
-	assert.deepEqual(result.config.pricing['custom/a'], { input: 2, output: 6, cacheRead: 0, cacheWrite: 9 });
+	assert.deepEqual(result.config.pricing['custom/a'], {
+		currency: 'USD',
+		source: 'models.dev',
+		input: 2,
+		output: 6,
+		cacheRead: 0,
+		cacheWrite: 9,
+	});
 	assert.deepEqual(result.report, {
 		updated: ['custom/a'],
 		unmatched: ['custom/a-prime'],
 		unsupported: ['custom/tier', 'custom/bad'],
 		ambiguous: [],
+		details: [
+			{ route: 'custom/a-prime', reason: 'unmatched' },
+			{ route: 'custom/tier', reason: 'conditionalPricing' },
+			{ route: 'custom/bad', reason: 'invalidPrice' },
+		],
 	});
 	assert.equal(source.pricing['custom/a'].input, 0);
 });
@@ -105,7 +129,9 @@ test('sync updates only configured exact routes and preserves absent cache rates
 test('save publishes prices that reprice existing accounting without new session events', async () => {
 	const initial = { config: { ...config(), pricing: { 'p/a': zeroRate() } }, models: ['p/a'], revision: '1' };
 	const store = createConfigStore(async (url, options) =>
-		options ? response({ ...initial, config: JSON.parse(options.body).config, revision: '2' }) : response(initial),
+		options
+			? response({ ...initial, config: JSON.parse(options.body).config, revision: '2' })
+			: response(initial),
 	);
 	await store.load();
 	const buckets = { uncachedInputTokens: 100, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
@@ -168,11 +194,20 @@ test('context-dependent prices are preserved rather than flattened', () => {
 test('model-only sync uses original vendor and applies the same price to all local providers', () => {
 	const input = {
 		...config(),
-		pricing: { 'A/qwen-test': zeroRate(), 'B/qwen-test': zeroRate(), 'C/unknown': { ...zeroRate(), input: 9 } },
+		pricing: {
+			'A/qwen-test': zeroRate(),
+			'B/qwen-test': zeroRate(),
+			'C/unknown': { ...zeroRate(), input: 9 },
+		},
 	};
 	const catalog = {
 		'alibaba-token-plan': { models: { 'qwen-test': { cost: { input: 0, output: 0 } } } },
-		proxy: { models: { 'qwen-test': { cost: { input: 99, output: 99 } }, unknown: { cost: { input: 1, output: 2 } } } },
+		proxy: {
+			models: {
+				'qwen-test': { cost: { input: 99, output: 99 } },
+				unknown: { cost: { input: 1, output: 2 } },
+			},
+		},
 		alibaba: { models: { 'qwen-test': { cost: { input: 2, output: 6 } } } },
 		other: { models: { unknown: { cost: { input: 3, output: 4 } } } },
 	};
@@ -208,6 +243,8 @@ test('catalog persists under data and is reused offline; explicit sync fetches f
 			return response(catalog);
 		}, path);
 		await service.initialize(config());
+		assert.equal(calls, 0, 'initialization never downloads a missing catalog');
+		await service.prices(config());
 		assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), catalog);
 		await service.initialize({ ...config(), pricing: { 'A/a': zeroRate() } });
 		assert.equal(calls, 1);
@@ -224,6 +261,12 @@ test('catalog persists under data and is reused offline; explicit sync fetches f
 		writeFileSync(broken, 'not json');
 		const recovery = createModelsDev(async () => response(catalog), broken);
 		await recovery.initialize(config());
+		assert.equal(
+			readFileSync(broken, 'utf8'),
+			'not json',
+			'automatic initialization does not repair by fetching',
+		);
+		await recovery.prices(config());
 		assert.deepEqual(JSON.parse(readFileSync(broken, 'utf8')), catalog);
 	} finally {
 		rmSync(home, { recursive: true, force: true });
@@ -266,8 +309,10 @@ test('restart with configured prices skips catalog initialization, including zer
 		let stored = {
 			...config(),
 			formatVersion,
-			pricing: formatVersion === 1 ? { a: { ...zeroRate(), input: 9 }, b: zeroRate() }
-				: { 'A/a': { ...zeroRate(), input: 9 }, 'B/b': zeroRate() },
+			pricing:
+				formatVersion === 1
+					? { a: { ...zeroRate(), input: 9 }, b: zeroRate() }
+					: { 'A/a': { ...zeroRate(), input: 9 }, 'B/b': zeroRate() },
 		};
 		let calls = 0;
 		const query = {
@@ -295,7 +340,8 @@ test('restart with configured prices skips catalog initialization, including zer
 });
 
 test('empty first installation initializes the catalog once without adding models', async () => {
-	let stored = config(), calls = 0;
+	let stored = config(),
+		calls = 0;
 	const history = createHistoryModels(
 		{ listSessions: async () => [], readSession: async () => ({ events: [] }) },
 		{
@@ -317,7 +363,10 @@ test('empty first installation initializes the catalog once without adding model
 test('manual price written during initialization wins', async () => {
 	let stored = config();
 	const history = createHistoryModels(
-		{ listSessions: async () => [{ header: { id: 's' } }], readSession: async () => ({ events: [event('A', 'a')] }) },
+		{
+			listSessions: async () => [{ header: { id: 's' } }],
+			readSession: async () => ({ events: [event('A', 'a')] }),
+		},
 		{
 			readConfig: () => stored,
 			writeConfig: (value) => {
