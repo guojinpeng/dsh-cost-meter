@@ -427,6 +427,44 @@
 .gdcc_expand:hover {
 	background: var(--dsw-alias-interactive-bg-hover);
 }
+/* Peak rule controls on a model row. */
+.gdcc_tableTitle {
+	display: block;
+	color: var(--dsw-alias-label-tertiary);
+	margin-bottom: 8px;
+}
+.gdcc_ruleField {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--dsw-alias-label-secondary);
+	font-size: 12px;
+}
+.gdcc_ruleSelect {
+	width: 180px;
+}
+.gdcc_info {
+	width: 20px;
+	height: 20px;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	color: var(--dsw-alias-label-tertiary);
+	background: transparent;
+	cursor: pointer;
+}
+.gdcc_info svg {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+.gdcc_info:hover,
+.gdcc_info[aria-expanded='true'] {
+	color: var(--dsw-alias-label-primary);
+	background: var(--dsw-alias-interactive-bg-hover);
+}
 .gdcc_form :focus-visible {
 	outline: 2px solid var(--dsw-alias-label-primary);
 	outline-offset: 2px;

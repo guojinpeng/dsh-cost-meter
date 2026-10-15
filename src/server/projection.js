@@ -230,7 +230,7 @@ export function createCostUsageProjection(readResolvedConfig = readConfig, holid
 	const views = new WeakMap();
 	return {
 		key: PROJECTION_KEY,
-		stateVersion: 3,
+		stateVersion: 4,
 		stateSchema,
 		init: () => initialState(),
 		apply: (state, event) => {

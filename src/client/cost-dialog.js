@@ -120,6 +120,31 @@ export function createCostDialog(react, reactDom) {
 		);
 	}
 
+	/**
+	 * The information glyph: an outlined circle with a stem and a dot.
+	 * @returns the svg element.
+	 */
+	function IconInfoOutlineRegular(props) {
+		const { size = 16, className } = props ?? {};
+		return h(
+			`svg`,
+			{
+				width: size,
+				height: size,
+				className,
+				viewBox: `0 0 16 16`,
+				fill: `none`,
+				xmlns: `http://www.w3.org/2000/svg`,
+				'aria-hidden': `true`,
+				strokeWidth: 1,
+				stroke: `currentColor`,
+			},
+			h(`circle`, { cx: 8, cy: 8, r: 6.25 }),
+			h(`path`, { d: `M8 7.4V11.4`, strokeLinecap: `round` }),
+			h(`circle`, { cx: 8, cy: 4.9, r: 0.75, fill: `currentColor`, stroke: `none` }),
+		);
+	}
+
 	const PANEL_MARGIN = 12;
 	const PANEL_GAP = 8;
 	const MEASURE_STYLE = { visibility: `hidden`, left: 0, top: 0 };
@@ -196,5 +221,5 @@ export function createCostDialog(react, reactDom) {
 		);
 	}
 
-	return { useCostDialog, panel, details, IconGaugeOutlineRegular };
+	return { useCostDialog, panel, details, IconGaugeOutlineRegular, IconInfoOutlineRegular };
 }

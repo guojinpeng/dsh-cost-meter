@@ -1,6 +1,6 @@
 {
   "name": "@guojinpeng/dsh-cost-meter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "DSH 会话和每轮费用估算插件，支持 models.dev、OpenRouter 和 DeepInfra 价格同步与自定义模型单价。配置位于 ~/.dsh/guojinpeng/dsh-cost-meter/config.json。",
   "license": "MIT",
@@ -26,11 +26,13 @@
     },
     "./client": {
       "default": "./dist/client.js"
-    }
+    },
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "dist",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "locale"
   ],
   "scripts": {
     "build": "tsup src/index.js src/client.js --format esm --out-dir dist --clean --no-splitting --loader .css=text",

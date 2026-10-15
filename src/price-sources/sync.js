@@ -35,8 +35,6 @@ export function syncPrices(config, catalog, adapter) {
 			report.details.push({ route: key, reason: 'invalidPrice' });
 			continue;
 		}
-		if (isDeepSeekRoute(key) && offer.peakBasis === true && previous.autoOffPeak === undefined)
-			next.autoOffPeak = true;
 		pricing[key] = next;
 		report.updated.push(key);
 		if (offer.preservedFields?.length)

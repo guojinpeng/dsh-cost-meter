@@ -70,8 +70,8 @@ if (mixed) {
 	accounting.calendars = { 2026: ['2026-10-01'] };
 	accounting.byTime = {
 		[key]: {
-			'2026-10-01/window': Object.fromEntries(Object.entries(ds).map(([field, count]) => [field, count / 2])),
-			'2026-10-14/window': Object.fromEntries(Object.entries(ds).map(([field, count]) => [field, count / 2])),
+			'2026-10-01/am': Object.fromEntries(Object.entries(ds).map(([field, count]) => [field, count / 2])),
+			'2026-10-14/am': Object.fromEntries(Object.entries(ds).map(([field, count]) => [field, count / 2])),
 		},
 	};
 	for (const field of Object.keys(ds)) accounting.totals[field] += ds[field];

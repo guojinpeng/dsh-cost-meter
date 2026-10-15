@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Usage & Cost",
-    "description": "A visual billing plugin in the official DSH style"
+    "description": "Cost estimates for DSH sessions and turns, in the official DSH style. Syncs prices, keeps custom model rates, and applies peak/off-peak pricing."
   }
 }

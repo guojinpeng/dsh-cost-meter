@@ -2,10 +2,10 @@ import { createFormControls } from './form-controls.js';
 import { createPricingTable } from './pricing-table.js';
 import { PRICE_SOURCES } from '../price-sources.js';
 
-export function createConfigPage(react, useConfigController) {
+export function createConfigPage(react, useConfigController, dialogs) {
 	const h = react.createElement;
 	const { field, numberInput } = createFormControls(react);
-	const PricingTable = createPricingTable(react, numberInput);
+	const PricingTable = createPricingTable(react, numberInput, dialogs);
 	return function CostConfigCard({ t }) {
 		const {
 			draft,
@@ -40,36 +40,10 @@ export function createConfigPage(react, useConfigController) {
 					: null,
 			]);
 		return h('fieldset', { className: 'gdcc_form', disabled: busy }, [
-			h(
-				'div',
-				{ key: 'status', className: 'gdcc_saveStatus', role: 'status', 'aria-live': 'polite' },
-				error
-					? [
-							h('span', { key: 'error', className: 'gdcc_error' }, error),
-							!invalid
-								? h(
-										'button',
-										{
-											key: 'retry',
-											type: 'button',
-											className: 'gdcc_expand',
-											title: t('configRetry'),
-											'aria-label': t('configRetry'),
-											onClick: retry,
-										},
-										'↻',
-									)
-								: null,
-						]
-					: saving
-						? t('configSaving')
-						: notice,
-			),
-			h('details', { key: 'basic', className: 'gdcc_section', open: true }, [
+			h('details', { key: 'basic', className: 'gdcc_section' }, [
 				h('summary', { key: 'title' }, t('configBasic')),
 				h('div', { key: 'content', className: 'gdcc_sectionBody' }, [
 					h('div', { key: 'toolbar', className: 'gdcc_tableToolbar' }, [
-						h('span', { key: 'title', className: 'gdcc_hint' }, `${t('configPricing')} / 1M tokens`),
 						h('div', { key: 'source', className: 'gdcc_syncControls' }, [
 							h('label', { key: 'label', className: 'gdcc_sourceLabel' }, [
 								h('span', { key: 'from' }, t('configFrom')),
@@ -111,6 +85,11 @@ export function createConfigPage(react, useConfigController) {
 								),
 							)
 						: null,
+					h(
+						'span',
+						{ key: 'title', className: 'gdcc_hint gdcc_tableTitle' },
+						`${t('configPricing')} / 1M tokens`,
+					),
 					h(PricingTable, { key: 'rows', rows: draft.rows, rowPatch, currency, flush, t }),
 				]),
 			]),
@@ -141,6 +120,31 @@ export function createConfigPage(react, useConfigController) {
 					),
 				]),
 			]),
+			h(
+				'div',
+				{ key: 'status', className: 'gdcc_saveStatus', role: 'status', 'aria-live': 'polite' },
+				error
+					? [
+							h('span', { key: 'error', className: 'gdcc_error' }, error),
+							!invalid
+								? h(
+										'button',
+										{
+											key: 'retry',
+											type: 'button',
+											className: 'gdcc_expand',
+											title: t('configRetry'),
+											'aria-label': t('configRetry'),
+											onClick: retry,
+										},
+										'↻',
+									)
+								: null,
+						]
+					: saving
+						? t('configSaving')
+						: notice,
+			),
 		]);
 	};
 }

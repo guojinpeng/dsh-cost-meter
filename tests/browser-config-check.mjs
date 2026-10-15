@@ -27,7 +27,7 @@ export async function checkConfigPage(page, url, initial, screenshot) {
 					cacheRead: 0,
 					cacheWrite: 0,
 				},
-				[ds]: { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0 },
+				[ds]: { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0, autoOffPeak: false },
 			},
 		},
 	};
@@ -108,14 +108,26 @@ export async function checkConfigPage(page, url, initial, screenshot) {
 	}
 	await page.getByRole('button', { name: '插件', exact: true }).click();
 	await page.keyboard.press('Escape');
-	await page.getByText('@guojinpeng/dsh-cost-meter', { exact: true }).first().click();
+	await page.locator('[data-plugin-package="@guojinpeng/dsh-cost-meter"]').click();
+	assert.equal(await page.locator('.gdcc_section').first().getAttribute('open'), null);
+	assert.equal(await page.locator('.gdcc_section').last().getAttribute('open'), null);
+	assert.deepEqual(
+		await page.locator('.gdcc_form > *').evaluateAll((nodes) => nodes.map((node) => node.className)),
+		['gdcc_section', 'gdcc_section', 'gdcc_saveStatus'],
+		'the save status line sits below both sections',
+	);
+	await page.locator('.gdcc_section').first().locator('summary').click();
 	await page.getByText('qwen3.8-max', { exact: true }).waitFor();
 	assert.deepEqual(await page.locator('.gdcc_provider').allTextContents(), [
 		'com-aliyun',
 		'deepseek-official',
 	]);
-	assert.equal(await page.locator('.gdcc_section').first().getAttribute('open'), '');
-	assert.equal(await page.locator('.gdcc_section').last().getAttribute('open'), null);
+	const syncButton = page.getByRole('button', { name: '同步价格', exact: true });
+	const ratesTitle = page.getByText('模型单价 / 1M tokens', { exact: true });
+	assert.ok(
+		(await syncButton.boundingBox()).y < (await ratesTitle.boundingBox()).y,
+		'sync controls sit above the rates table',
+	);
 	assert.equal(await page.getByRole('button', { name: /^(保存|重新加载)$/ }).count(), 0);
 	assert.equal(await page.getByTitle('价格归零').count(), 0);
 	assert.equal(await page.getByText('显示货币', { exact: true }).count(), 0);
@@ -151,10 +163,34 @@ export async function checkConfigPage(page, url, initial, screenshot) {
 	);
 	await page.getByRole('button', { name: `${ds} 高级配置`, exact: true }).click();
 	assert.equal(
-		await page.getByRole('switch', { name: `${ds} 自动计算峰谷`, exact: true }).isChecked(),
+		await page.getByRole('switch', { name: `${ds} 自动计算谷价`, exact: true }).isChecked(),
 		false,
 	);
-	assert.equal(await page.getByRole('switch', { name: `${key} 自动计算峰谷`, exact: true }).count(), 0);
+	assert.equal(await page.getByRole('switch', { name: `${key} 自动计算谷价`, exact: true }).count(), 1);
+	await page.getByRole('switch', { name: `${ds} 自动计算谷价`, exact: true }).check();
+	const ruleSelect = page.getByRole('combobox', { name: `${ds} 峰谷计费规则`, exact: true });
+	assert.deepEqual(await ruleSelect.locator('option').allTextContents(), [
+		'DeepSeek 峰谷规则',
+		'阿里云峰谷规则',
+		'智谱 GLM 峰谷规则',
+	]);
+	assert.equal(await ruleSelect.inputValue(), 'deepseek');
+	await ruleSelect.selectOption('aliyun');
+	await page.waitForTimeout(500);
+	assert.equal(fixture.config.pricing[ds].peakRule, 'aliyun');
+	await page.getByRole('button', { name: `${ds} 峰谷时段说明`, exact: true }).click();
+	await page.waitForTimeout(300);
+	const hint = await page.getByRole('dialog').innerText();
+	assert.ok(hint.includes('阿里云峰谷规则') && hint.includes('22:00'), hint);
+	await page.keyboard.press('Escape');
+	assert.equal(await page.getByRole('dialog').count(), 0);
+	await ruleSelect.selectOption('deepseek');
+	await page.waitForTimeout(500);
+	assert.equal(fixture.config.pricing[ds].peakRule, 'deepseek');
+	await page.getByRole('switch', { name: `${ds} 自动计算谷价`, exact: true }).uncheck();
+	await page.waitForTimeout(500);
+	assert.equal(fixture.config.pricing[ds].autoOffPeak, false);
+	assert.equal(await page.getByRole('combobox', { name: `${ds} 峰谷计费规则`, exact: true }).count(), 0);
 	page.once('dialog', (dialog) => dialog.dismiss());
 	await page.getByRole('button', { name: '同步价格', exact: true }).click();
 	assert.equal(syncCalls, 0);
@@ -163,7 +199,11 @@ export async function checkConfigPage(page, url, initial, screenshot) {
 	await page.getByText(/已更新:/).waitFor();
 	assert.equal(syncCalls, 1);
 	assert.equal(fixture.config.pricing[ds].input, 0.3);
-	assert.equal(fixture.config.pricing[ds].autoOffPeak, true);
+	assert.ok(
+		(await page.locator('.gdcc_syncReport').boundingBox()).y < (await ratesTitle.boundingBox()).y,
+		'the sync report sits above the rates table',
+	);
+	assert.equal(fixture.config.pricing[ds].autoOffPeak, false);
 	assert.equal(fixture.config.pricing[key].input, 2 * fixture.config.cnyPerUsd);
 	assert.equal(fixture.config.pricing[key].source, 'models.dev');
 	await input.fill('');
@@ -189,6 +229,12 @@ export async function checkConfigPage(page, url, initial, screenshot) {
 	await page.waitForTimeout(700);
 	assert.equal(fixture.config.cnyPerUsd, 7);
 	assert.equal(fixture.config.pricing[key].input, 5, 'exchange changes do not rewrite saved prices');
+	const dsSwitch = page.getByRole('switch', { name: `${ds} 自动计算谷价`, exact: true });
+	if (!(await dsSwitch.isVisible()))
+		await page.getByRole('button', { name: `${ds} 高级配置`, exact: true }).click();
+	await dsSwitch.check();
+	await page.waitForTimeout(500);
+	assert.equal(fixture.config.pricing[ds].autoOffPeak, true);
 	for (const [id, expected] of [
 		['openrouter.ai', 21],
 		['api.deepinfra.com', 2.8],

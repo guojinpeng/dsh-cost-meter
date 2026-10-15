@@ -115,7 +115,7 @@ export function createUseConfigController(react, store) {
 			else timer.current = setTimeout(() => flush().catch(() => {}), 400);
 		};
 		const rowPatch = (key, field, value) =>
-			change(key, field, value, typeof value === 'boolean', RATE_KEYS.includes(field));
+			change(key, field, value, typeof value === 'boolean' || field === 'peakRule', RATE_KEYS.includes(field));
 		const currency = (key, value) => {
 			const row = current.current.rows.find((row) => row.key === key);
 			if (

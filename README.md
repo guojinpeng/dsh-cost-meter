@@ -33,16 +33,19 @@ GitHub contains the source code and release notes.
 - Supports separate prices for each full `provider/model` name.
 - Selects models.dev, openrouter.ai or api.deepinfra.com as the price source.
 - Initializes new model prices from the selected source's local cache. Uses zero if there is no matching price.
-- Downloads model prices only when you select **Sync prices**.
+- Downloads model prices only when you select **Sync prices**. The source controls, the Sync prices button and the sync report stay above the model rates table.
 - Syncs only configured models. Asks for confirmation before prices are overwritten.
 - Matches source prices by model ID. models.dev prefers manufacturer prices; OpenRouter and DeepInfra supply their own platform prices. Keeps existing prices if matching is unclear.
 - Keeps existing prices when the source cannot supply a supported rate.
 - Supports USD or CNY for each model. Converts all four rates when you change its currency.
 - Shows separate USD and CNY totals when a session or turn uses both currencies.
 - Saves valid changes automatically, in order. Keeps unfinished input and shows save errors.
-- Shows basic settings first. Advanced settings contain the exchange rate and session/turn visibility controls.
-- Puts cache-write prices and DeepSeek peak/off-peak controls in each model's advanced settings.
-- Applies half the peak rate outside Beijing weekday hours 09:00–12:00 and 14:00–18:00, and on weekends and Chinese public holidays.
+- Keeps basic settings and advanced settings collapsed. Advanced settings contain the exchange rate and session/turn visibility controls.
+- Puts cache-write prices and the automatic off-peak switch of every model in each model's advanced settings. The switch reveals that model's peak rule selector, and the info icon shows the windows of the selected rule.
+- Applies half the peak rate in each off-peak window. Each model selects one peak rule:
+- **DeepSeek peak rule** (default): peak on Beijing weekday 09:00–12:00 and 14:00–18:00; off-peak on weekends, Chinese public holidays and all other windows.
+- **Alibaba Cloud peak rule**: off-peak 22:00–08:00 Beijing time; peak at all other times.
+- **Zhipu GLM peak rule**: peak on Beijing Monday to Friday 14:00–18:00; off-peak at all other times, including the whole weekend.
 - Uses holiday-cn annual calendars, cached under `data/holidays/`. Fetches a missing year in the background.
 - Stores configuration at `~/.dsh/guojinpeng/dsh-cost-meter/config.json`. Uses `DSH_HOME` when set.
 - Copies the old `~/.dsh/dsh-cost-meter/config.json` on first start if the new file does not exist. Keeps the old file.
@@ -50,13 +53,13 @@ GitHub contains the source code and release notes.
 
 These screenshots use example model prices. They do not show a billing statement.
 
-Existing model prices without a currency remain USD. Existing DeepSeek entries without a peak/off-peak setting keep fixed rates until you sync them or enable the setting. Confirmed original-vendor DeepSeek off-peak rates from models.dev are multiplied by two to store peak rates. The setting is enabled by default for new DeepSeek provider entries, not for DeepSeek models from other providers.
+Existing model prices without a currency remain USD. Existing entries without an off-peak setting keep fixed rates until you switch it on. The switch is off by default for every new entry. Confirmed original-vendor DeepSeek off-peak rates from models.dev are multiplied by two to store peak rates. Every model applies its own selected rule; the default is the DeepSeek peak rule.
 
-The configuration file stays at the same path. No configuration migration is required. Historical usage is replayed to restore dates and time windows. Requests that cross a price boundary are estimated from the recorded usage settlement time. If a holiday calendar is unavailable, uncertain weekday windows use the peak rate until the calendar is loaded.
+The configuration file stays at the same path. No configuration migration is required. Historical usage is replayed to restore dates and seven Beijing clock windows under projection state version 4. Requests that cross a price boundary are estimated from the recorded usage settlement time. Only the DeepSeek peak rule reads the holiday calendar; the Alibaba Cloud and GLM rules never need it. If a holiday calendar is unavailable, uncertain weekday windows use the peak rate until the calendar is loaded.
 
 `priceSource` selects the cache for new models. Existing configuration without this field uses models.dev. Each model's `source` records its last price import; edits to rates on the configuration page set it to `manual`. Changing the selected source does not change existing rates or fetch prices. Cost calculation uses only the saved rates.
 
-Caches are separate: `data/models.dev.json`, `data/openrouter.ai.json` and `data/api.deepinfra.com.json`. OpenRouter and DeepInfra prices are not multiplied by two. Entries with automatic DeepSeek off-peak pricing keep their rates when the source cannot confirm an official peak rate. Sync reports show skipped models and cache-write rates that were kept because the cache duration is unclear. Conditional prices and non-token charges are outside this fixed-rate estimate.
+Caches are separate: `data/models.dev.json`, `data/openrouter.ai.json` and `data/api.deepinfra.com.json`. OpenRouter and DeepInfra prices are not multiplied by two. DeepSeek entries with automatic off-peak pricing keep their rates when the source cannot confirm an official peak rate. Sync reports show skipped models and cache-write rates that were kept because the cache duration is unclear. Conditional prices and non-token charges are outside this fixed-rate estimate.
 
 Session cost details:
 
@@ -90,10 +93,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.2.0:
+Install the generated file in your DSH profile. For version 0.3.0:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.2.0.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.0.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.

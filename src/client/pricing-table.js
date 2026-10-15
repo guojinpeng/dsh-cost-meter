@@ -1,8 +1,58 @@
 import { parseRouteKey } from '../pricing.js';
-import { isDeepSeekRoute } from '../time-of-use.js';
+import { DEFAULT_PEAK_RULE, PEAK_RULES } from '../time-of-use.js';
 
-export function createPricingTable(react, numberInput) {
+export function createPricingTable(react, numberInput, dialogs) {
 	const h = react.createElement;
+	const { useCostDialog, panel, IconInfoOutlineRegular } = dialogs;
+
+	/**
+	 * The peak rule of one model: the rule list and an info button that
+	 * opens the clock-window explanation of the selected rule.
+	 */
+	function PeakRuleField({ routeKey, rowPatch, value, t }) {
+		const dialog = useCostDialog();
+		const rule = PEAK_RULES.find((entry) => entry.id === value) ?? PEAK_RULES[0];
+		const hint = t(rule.hint);
+		return h('span', { className: 'gdcc_ruleField', ref: dialog.rootRef }, [
+			h('span', { key: 'label', className: 'gdcc_hint' }, t('configPeakRule')),
+			h(
+				'select',
+				{
+					key: 'select',
+					className: 'gdcc_input gdcc_ruleSelect',
+					value: rule.id,
+					'aria-label': `${routeKey} ${t('configPeakRule')}`,
+					onChange: (event) => rowPatch(routeKey, 'peakRule', event.target.value),
+				},
+				PEAK_RULES.map((entry) => h('option', { key: entry.id, value: entry.id }, t(entry.label))),
+			),
+			h(
+				'button',
+				{
+					key: 'info',
+					type: 'button',
+					className: 'gdcc_info',
+					title: hint,
+					'aria-label': `${routeKey} ${t('configRuleInfo')}`,
+					'aria-haspopup': 'dialog',
+					'aria-expanded': dialog.open,
+					onClick: () => dialog.setOpen(!dialog.open),
+				},
+				h(IconInfoOutlineRegular, null),
+			),
+			dialog.open
+				? panel({
+						panelRef: dialog.panelRef,
+						pos: dialog.pos,
+						title: t('configPeakRule'),
+						value: t(rule.label),
+						icon: IconInfoOutlineRegular,
+						children: h('div', { className: 'gdcc_note' }, hint),
+					})
+				: null,
+		]);
+	}
+
 	function ModelRow({ row, rowPatch, currency, flush, t }) {
 		const [open, setOpen] = react.useState(false);
 		const model = parseRouteKey(row.key).model;
@@ -46,21 +96,25 @@ export function createPricingTable(react, numberInput) {
 							h('span', { key: 'label' }, `${t('cacheWrite')} (${row.currency} / 1M tokens)`),
 							input('cacheWrite'),
 						]),
-						isDeepSeekRoute(row.key)
-							? h('label', { key: 'peak', className: 'gdcc_switch' }, [
-									h('span', { key: 'label' }, t('configAutoOffPeak')),
-									h('input', {
-										key: 'input',
-										type: 'checkbox',
-										role: 'switch',
-										checked: row.autoOffPeak === true,
-										'aria-label': `${row.key} ${t('configAutoOffPeak')}`,
-										onChange: (event) => rowPatch(row.key, 'autoOffPeak', event.target.checked),
-									}),
-								])
-							: null,
-						row.autoOffPeak === undefined && isDeepSeekRoute(row.key)
-							? h('span', { key: 'legacy', className: 'gdcc_hint' }, t('configLegacyFixed'))
+						h('label', { key: 'peak', className: 'gdcc_switch' }, [
+							h('span', { key: 'label' }, t('configAutoOffPeak')),
+							h('input', {
+								key: 'input',
+								type: 'checkbox',
+								role: 'switch',
+								checked: row.autoOffPeak === true,
+								'aria-label': `${row.key} ${t('configAutoOffPeak')}`,
+								onChange: (event) => rowPatch(row.key, 'autoOffPeak', event.target.checked),
+							}),
+						]),
+						row.autoOffPeak === true
+							? h(PeakRuleField, {
+									key: 'rule',
+									routeKey: row.key,
+									rowPatch,
+									value: row.peakRule ?? DEFAULT_PEAK_RULE,
+									t,
+								})
 							: null,
 					])
 				: null,

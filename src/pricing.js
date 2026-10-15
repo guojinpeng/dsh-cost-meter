@@ -1,9 +1,9 @@
-import { isDeepSeekRoute, pricePeriod } from './time-of-use.js';
+import { PEAK_RULE_IDS, peakRule, pricePeriod } from './time-of-use.js';
 import { PRICE_SOURCES } from './price-sources.js';
 
 export const RATE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite'];
 export const zeroRate = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
-export const newRate = (key) => ({ ...zeroRate(), currency: 'USD', autoOffPeak: isDeepSeekRoute(key) });
+export const newRate = () => ({ ...zeroRate(), currency: 'USD', autoOffPeak: false });
 
 export function convertRateCurrency(rate, currency, cnyPerUsd) {
 	const previous = rate.currency ?? 'USD';
@@ -29,6 +29,7 @@ export function normalizeRate(entry) {
 		),
 		...(entry.currency === 'USD' || entry.currency === 'CNY' ? { currency: entry.currency } : {}),
 		...(typeof entry.autoOffPeak === 'boolean' ? { autoOffPeak: entry.autoOffPeak } : {}),
+		...(PEAK_RULE_IDS.includes(entry.peakRule) ? { peakRule: entry.peakRule } : {}),
 		...([...PRICE_SOURCES, 'manual'].includes(entry.source) ? { source: entry.source } : {}),
 	};
 }
@@ -73,13 +74,13 @@ function priceRoutes(byRoute, config, byTime = {}, calendars = {}) {
 		if (rate === null) unpricedTokens += totalTokens;
 		else {
 			const parts = { input: 0, output: 0, read: 0, write: 0 };
-			const samples =
-				rate.autoOffPeak && isDeepSeekRoute(key)
-					? Object.entries(byTime[key] ?? { unknown: buckets })
-					: [['fixed', buckets]];
+			const rule = peakRule(rate.peakRule);
+			const samples = rate.autoOffPeak
+				? Object.entries(byTime[key] ?? { unknown: buckets })
+				: [['fixed', buckets]];
 			for (const [time, sample] of samples) {
-				const period = time === 'fixed' ? 'fixed' : pricePeriod(time, calendars);
-				const factor = period === 'offPeak' ? 0.5 : 1;
+				const period = time === 'fixed' ? 'fixed' : pricePeriod(time, rule.id, calendars);
+				const factor = period === 'offPeak' ? rule.factor : 1;
 				if (period === 'peak') peakTokens += tokensOf(sample);
 				if (period === 'offPeak') offPeakTokens += tokensOf(sample);
 				if (period === 'unknown') uncertainTokens += tokensOf(sample);

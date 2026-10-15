@@ -25,8 +25,18 @@ export const zh = {
 	configRetryLoad: '重试读取',
 	configAdvanced: '高级配置',
 	configModelCurrency: '币种',
-	configAutoOffPeak: '自动计算峰谷',
-	configLegacyFixed: '旧条目：固定价格',
+	configAutoOffPeak: '自动计算谷价',
+	configPeakRule: '峰谷计费规则',
+	configRuleInfo: '峰谷时段说明',
+	configRule_deepseek: 'DeepSeek 峰谷规则',
+	configRule_aliyun: '阿里云峰谷规则',
+	configRule_glm: '智谱 GLM 峰谷规则',
+	configRuleHint_deepseek:
+		'DeepSeek 官方规则：北京时间周一至周五（不含中国法定节假日）9:00–12:00、14:00–18:00 为高峰，其余时段（含周末与中国法定节假日全天）为谷时。谷时价格按高峰价的 50% 计算。',
+	configRuleHint_aliyun:
+		'阿里云规则：北京时间 22:00–次日 8:00 为错峰（谷时），其余时段为忙时（高峰）。错峰价格按忙时价的 50% 计算。',
+	configRuleHint_glm:
+		'智谱 GLM 规则：北京时间周一至周五 14:00–18:00 为高峰，其余时段（含周末全天）为谷时。谷时价格按高峰价的 50% 计算。',
 	configInvalidNumber: '请输入有效的非负价格，汇率必须大于零。',
 	configSyncModelsDev: '从 models.dev 同步价格',
 	configSyncing: '同步中…',
@@ -90,8 +100,18 @@ export const en = {
 	configRetryLoad: 'Retry load',
 	configAdvanced: 'Advanced settings',
 	configModelCurrency: 'Currency',
-	configAutoOffPeak: 'Automatic off-peak pricing',
-	configLegacyFixed: 'Existing entry: fixed price',
+	configAutoOffPeak: 'Automatic off-peak price',
+	configPeakRule: 'Peak pricing rule',
+	configRuleInfo: 'Peak window details',
+	configRule_deepseek: 'DeepSeek peak rule',
+	configRule_aliyun: 'Alibaba Cloud peak rule',
+	configRule_glm: 'Zhipu GLM peak rule',
+	configRuleHint_deepseek:
+		'DeepSeek rule: Beijing time Monday to Friday (except Chinese public holidays) 9:00-12:00 and 14:00-18:00 are peak. All other hours, weekends, and holidays are off-peak. An off-peak price is 50% of the peak price.',
+	configRuleHint_aliyun:
+		'Alibaba Cloud rule: Beijing time 22:00-08:00 is off-peak. All other hours are peak. An off-peak price is 50% of the peak price.',
+	configRuleHint_glm:
+		'Zhipu GLM rule: Beijing time Monday to Friday 14:00-18:00 is peak. All other hours, including weekends, are off-peak. An off-peak price is 50% of the peak price.',
 	configInvalidNumber: 'Enter a valid non-negative price. The exchange rate must be greater than zero.',
 	configSyncModelsDev: 'Sync prices from models.dev',
 	configSyncing: 'Syncing…',

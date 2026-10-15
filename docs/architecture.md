@@ -19,11 +19,12 @@
 | `server/price-service.js` | Selected price source and independent catalog services / 所选价格来源及独立缓存服务装配 |
 | `price-sources/` | Source adapters, catalog caching, model matching and shared sync / 来源适配、目录缓存、模型匹配和共享同步 |
 | `price-sources.js` | Client-safe source IDs and legacy default / 前后端共用来源标识及旧配置默认值 |
-| `time-of-use.js` | Beijing date/window classification and provider eligibility / 北京时间日期、时段及提供方判断，纯函数 |
+| `time-of-use.js` | Beijing clock windows, peak-rule lookup and provider eligibility / 北京时段分桶、峰谷规则查找及提供方判断，纯函数 |
+| `peak-rules/` | One peak rule per file: DeepSeek, Alibaba Cloud, Zhipu GLM / 每个峰谷规则一个文件 |
 
-`history.js` owns historical model discovery and missing-price initialization. `server/price-service.js` selects the source service. `price-sources/` owns fetching, caching and source price conversion. `models-dev.js` preserves the existing models.dev entry point. `pricing.js` is shared by server and client; it has no filesystem, HTTP or UI dependencies.
+`history.js` owns historical model discovery and missing-price initialization. `server/price-service.js` selects the source service. `price-sources/` owns fetching, caching and source price conversion. `peak-rules/` holds one file per peak rule; each rule decides its own windows and reads the holiday calendar only when it needs one. `models-dev.js` preserves the existing models.dev entry point. `pricing.js` is shared by server and client; it has no filesystem, HTTP or UI dependencies.
 
-历史模型发现和初始化由 `history.js` 协调，各来源适配器统一输出 USD / 百万 token 单价。共享同步负责币种转换、模型来源标记和峰谷兼容检查；共享计价函数仍保持纯计算。
+历史模型发现和初始化由 `history.js` 协调，各来源适配器统一输出 USD / 百万 token 单价。共享同步负责币种转换、模型来源标记和峰谷兼容检查；共享计价函数仍保持纯计算。各规则独立实现时段判断，计价时按模型条目自己所选的 `peakRule` 调用。
 
 ## Client / 前端
 
@@ -34,7 +35,7 @@
 | `client/config-draft.js` | Draft conversion and validation / 草稿转换及校验 |
 | `client/config-controller.js` | Draft input, automatic saves, currency changes and sync / 输入草稿、自动保存、币种切换和同步流程 |
 | `client/config-page.js` | Settings page composition / 配置页面装配 |
-| `client/form-controls.js`, `client/pricing-table.js` | Form controls and provider/model price rows / 表单控件和按提供方分组的价格表 |
+| `client/form-controls.js`, `client/pricing-table.js` | Form controls and provider/model price rows with per-model peak rules / 表单控件、按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips and popover interactions / 费用标签、明细弹层和定位交互 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |
@@ -49,7 +50,7 @@ The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text
 - Keep the plugin ID, projection key, locale namespace and slots from `identity.js` unchanged.
 - Keep the configuration and sync route paths stable. GET can return the local configuration before history discovery finishes; `historyPending` and `calendarPending` request bounded local refreshes while those operations run.
 - Use exact local `provider/model` prices. Third-party price matching uses only the model ID.
-- Keep official token/retry folds and turn retention. Projection state version 3 preserves `event.time` and partitions tokens by route, Beijing date and clock window. DSH replays old checkpoint data from the durable log.
+- Keep official token/retry folds and turn retention. Projection state version 4 preserves `event.time` and partitions tokens by route, Beijing date and one of seven clock windows. DSH replays old checkpoint data from the durable log.
 - Keep revision checks and the re-read after network initialization. Manual prices must win over delayed initialization.
 - Keep draft values as strings while editing. Validate and convert them before saving.
 - Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; legacy `micros` fields remain expressed in USD for compatibility.
@@ -57,9 +58,9 @@ The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text
 
 ## Pricing And Cache / 价格与缓存
 
-Model entries append optional `currency` and `autoOffPeak` fields. Missing currency means USD; missing off-peak settings preserve fixed legacy rates. New model entries explicitly use USD and enable off-peak pricing only for DeepSeek providers. The old global currency field is retained if present but is not used for display. No new configuration format version or migration step is required.
+Model entries append optional `currency`, `autoOffPeak` and `peakRule` fields. Missing currency means USD; missing off-peak settings preserve fixed legacy rates. New model entries explicitly use USD and keep off-peak pricing off. `peakRule` accepts `deepseek`, `aliyun` or `glm`; a missing or unknown value means `deepseek`. The old global currency field is retained if present but is not used for display. No new configuration format version or migration step is required.
 
-模型条目追加字段即可，读取旧配置不会补写文件。币种切换转换四项单价并作为一次写入；修改汇率不重写模型单价。源价格始终从 models.dev 的 USD 原始数据计算，已确认的原厂 DeepSeek 谷价先乘以 2。无法确认峰谷口径时保留原价，避免重复折扣。
+模型条目追加字段即可，读取旧配置不会补写文件。币种切换转换四项单价并作为一次写入；修改汇率不重写模型单价。源价格始终从 models.dev 的 USD 原始数据计算，已确认的原厂 DeepSeek 谷价先乘以 2。无法确认峰谷口径时保留原价，避免重复折扣。每个模型按自身的 `peakRule` 计费，三套规则的谷价系数统一为 0.5。
 
 Only manual price sync downloads a catalog. Missing or broken catalogs do not trigger an automatic request. Initialization uses the selected source's catalog already on disk or keeps zero prices. GET does not wait for a complete history scan; writes reconcile history before revision checks.
 
@@ -67,7 +68,7 @@ Only manual price sync downloads a catalog. Missing or broken catalogs do not tr
 
 OpenRouter converts USD/token strings by multiplying by 1,000,000. DeepInfra converts cents/token by multiplying by 10,000, then applies supported cache multipliers and a valid promotion at import time. Standard service-tier prices are used. Conditional rates are skipped; ambiguous cache-write TTLs preserve the local write price. Bare model IDs use a unique namespace-suffix match, without dropping version or service suffixes. Enabled official DeepSeek off-peak entries require a confirmed peak basis and otherwise keep their prices.
 
-holiday-cn data is stored under `data/holidays/<year>.json`. Files contain holiday/weekend dates and source metadata. Weekends remain off-peak even on adjusted working days. Date and clock buckets stay in the projection, so calendars can reprice past usage without rewriting token counts. The configuration response carries loaded calendars; the shared client store polls the local endpoint only while discovery or calendar requests are pending.
+holiday-cn data is stored under `data/holidays/<year>.json`. Files contain holiday/weekend dates and source metadata. Under the DeepSeek peak rule, weekends and holidays remain off-peak even on adjusted working days; the Alibaba Cloud and GLM rules never read this calendar. Date and clock buckets stay in the projection, so calendars can reprice past usage without rewriting token counts. The configuration response carries loaded calendars; the shared client store polls the local endpoint only while discovery or calendar requests are pending.
 
 日历缺失时异步获取，不阻塞界面。只对无法确认的工作日高峰窗口暂用高峰价，并在费用明细中记录未确认 token。未知时间不能用当前时间补算。日历到齐后，前端使用原有计费分桶重新计算；不通过大模型调用峰谷工具。
 
@@ -80,9 +81,9 @@ Source references / 数据来源：
 - [DeepSeek pricing / 官方峰谷计价规则](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)
 - [holiday-cn / 中国节假日年度数据](https://github.com/NateScarlet/holiday-cn)
 
-`DEEPSEEK_OFF_PEAK_IDS` lists the source model IDs with confirmed off-peak rates. Check the source rate basis before you add an ID. Enabled DeepSeek entries keep their existing prices when that basis cannot be confirmed.
+`DEEPSEEK_OFF_PEAK_IDS` lists the source model IDs with confirmed off-peak rates. Check the source rate basis before you add an ID. Enabled DeepSeek entries keep their existing prices when that basis cannot be confirmed. The `aliyun` and `glm` rules use the window definitions and the 50% factor confirmed for this plugin; they do not read the holiday calendar.
 
-`DEEPSEEK_OFF_PEAK_IDS` 仅列出已确认使用谷价的来源模型 ID。后续增加 ID 前应核对来源价格口径；无法确认时，已开启峰谷的 DeepSeek 条目保留原价。
+`DEEPSEEK_OFF_PEAK_IDS` 仅列出已确认使用谷价的来源模型 ID。后续增加 ID 前应核对来源价格口径；无法确认时，已开启峰谷的 DeepSeek 条目保留原价。`aliyun` 与 `glm` 规则使用本插件确认的时段口径和 50% 系数，不读取节假日日历。
 
 ## Verify / 验证
 

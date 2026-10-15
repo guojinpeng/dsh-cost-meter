@@ -14,7 +14,7 @@ export function createClientPlugin(react, reactDom) {
 	const useCostView = createUseCostView(react, store);
 	const dialogs = createCostDialog(react, reactDom);
 	const { CostDockChip, CostTurnAction } = createCostChips(react, useCostView, dialogs);
-	const CostConfigCard = createConfigPage(react, createUseConfigController(react, store));
+	const CostConfigCard = createConfigPage(react, createUseConfigController(react, store), dialogs);
 	const NS = LOCALE_NAMESPACE;
 	const ENTRY_ID = PACKAGE_ID;
 	installStyles();

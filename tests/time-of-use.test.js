@@ -28,16 +28,16 @@ test('Beijing peak windows have precise inclusive starts and exclusive ends', ()
 		['17:59:59', 'peak'],
 		['18:00:00', 'offPeak'],
 	])
-		assert.equal(pricePeriod(timeBucket(time(`2026-10-14T${clock}`)), calendars), expected, clock);
-	assert.equal(timeBucket(Date.parse('2026-12-31T16:00:00Z')), '2027-01-01/idle');
+		assert.equal(pricePeriod(timeBucket(time(`2026-10-14T${clock}`)), 'deepseek', calendars), expected, clock);
+	assert.equal(timeBucket(Date.parse('2026-12-31T16:00:00Z')), '2027-01-01/night');
 });
 
 test('holiday weekdays and working weekends are off-peak; missing calendars remain uncertain', () => {
-	assert.equal(pricePeriod(timeBucket(time('2026-10-01T10:00:00')), calendars), 'offPeak');
-	assert.equal(pricePeriod(timeBucket(time('2026-10-10T10:00:00')), calendars), 'offPeak');
-	assert.equal(pricePeriod(timeBucket(time('2026-10-14T10:00:00'))), 'unknown');
-	assert.equal(pricePeriod(timeBucket(time('2026-10-14T20:00:00'))), 'offPeak');
-	assert.equal(pricePeriod(timeBucket(undefined), calendars), 'unknown');
+	assert.equal(pricePeriod(timeBucket(time('2026-10-01T10:00:00')), 'deepseek', calendars), 'offPeak');
+	assert.equal(pricePeriod(timeBucket(time('2026-10-10T10:00:00')), 'deepseek', calendars), 'offPeak');
+	assert.equal(pricePeriod(timeBucket(time('2026-10-14T10:00:00')), 'deepseek'), 'unknown');
+	assert.equal(pricePeriod(timeBucket(time('2026-10-14T20:00:00')), 'deepseek'), 'offPeak');
+	assert.equal(pricePeriod(timeBucket(undefined), 'deepseek', calendars), 'unknown');
 	assert.equal(isDeepSeekRoute('deepseek-official/deepseek-flash'), true);
 	assert.equal(isDeepSeekRoute('com-aliyun/deepseek-flash'), false);
 });
@@ -122,6 +122,8 @@ test('native model currencies convert once and remain separate in mixed totals',
 	);
 	assert.equal(view.totalMicros, 4000000);
 	assert.equal(normalizeRate({ ...cny, autoOffPeak: true }).autoOffPeak, true);
+	assert.equal(normalizeRate({ ...cny, peakRule: 'glm' }).peakRule, 'glm');
+	assert.equal(normalizeRate({ ...cny, peakRule: 'nope' }).peakRule, undefined);
 });
 
 test('DeepSeek source off-peak prices become peak prices before currency conversion, without compounding', () => {
@@ -137,7 +139,7 @@ test('DeepSeek source off-peak prices become peak prices before currency convers
 	};
 	const first = syncModelsDev(config, catalog).config;
 	assert.equal(first.pricing['deepseek-official/deepseek-flash'].input, 2.1);
-	assert.equal(first.pricing['deepseek-official/deepseek-flash'].autoOffPeak, true);
+	assert.equal(first.pricing['deepseek-official/deepseek-flash'].autoOffPeak, undefined);
 	assert.equal(first.pricing['deepseek-account/deepseek-flash'].autoOffPeak, false);
 	assert.deepEqual(syncModelsDev(first, catalog).config, first);
 });
@@ -148,7 +150,7 @@ test('dated peak/off-peak buckets reprice when the calendar arrives; legacy entr
 		totals: bucket(2000000),
 		byRoute: { [key]: bucket(2000000) },
 		byTime: {
-			[key]: { '2026-10-01/window': bucket(), '2026-10-14/window': bucket() },
+			[key]: { '2026-10-01/am': bucket(), '2026-10-14/am': bucket() },
 		},
 		turns: {},
 		skippedTurns: 0,
@@ -163,13 +165,13 @@ test('dated peak/off-peak buckets reprice when the calendar arrives; legacy entr
 	assert.equal(buildCostView({ ...accounting, calendars }, config).totalMicros, 4000000);
 });
 
-test('other providers never receive the DeepSeek discount even if the flag is set', () => {
+test('the off-peak flag applies to any provider under its selected rule', () => {
 	const key = 'com-aliyun/deepseek-flash';
 	const accounting = {
 		totals: bucket(),
 		byRoute: { [key]: bucket() },
 		byTime: {
-			[key]: { '2026-10-01/window': bucket() },
+			[key]: { '2026-10-01/am': bucket() },
 		},
 		calendars,
 		turns: {},
@@ -179,6 +181,35 @@ test('other providers never receive the DeepSeek discount even if the flag is se
 		cnyPerUsd: 7,
 		pricing: { [key]: { ...zeroRate(), input: 2, autoOffPeak: true } },
 	});
-	assert.equal(view.totalMicros, 2000000);
-	assert.equal(view.offPeakTokens, 0);
+	assert.equal(view.totalMicros, 1000000);
+	assert.equal(view.offPeakTokens, 1000000);
+});
+
+test('each model prices its own clock windows with its own rule', () => {
+	const key = 'com-aliyun/deepseek-flash';
+	const accounting = {
+		totals: bucket(2000000),
+		byRoute: { [key]: bucket(2000000) },
+		byTime: { [key]: { '2026-10-14/am': bucket(), '2026-10-14/late': bucket() } },
+		calendars,
+		turns: {},
+		skippedTurns: 0,
+	};
+	const rate = (peakRule) => ({ ...zeroRate(), input: 2, autoOffPeak: true, peakRule });
+	const priced = (peakRule) =>
+		buildCostView(accounting, { cnyPerUsd: 7, pricing: { [key]: rate(peakRule) } });
+	// DeepSeek: 10:00 weekday peak, 23:00 off-peak.
+	assert.equal(priced('deepseek').totalMicros, 3000000);
+	// Alibaba Cloud: 10:00 busy, 23:00 off-peak.
+	assert.equal(priced('aliyun').totalMicros, 3000000);
+	assert.equal(priced('aliyun').peakTokens, 1000000);
+	// Zhipu GLM: only 14:00-18:00 is peak, so both windows are off-peak.
+	assert.equal(priced('glm').totalMicros, 2000000);
+	assert.equal(priced('glm').offPeakTokens, 2000000);
+});
+
+test('an unknown rule falls back to DeepSeek; a malformed bucket stays uncertain', () => {
+	assert.equal(pricePeriod('2026-10-14/late', 'nope', calendars), 'offPeak');
+	assert.equal(pricePeriod('2026-10-14/lunch', 'deepseek', calendars), 'unknown');
+	assert.equal(pricePeriod('unknown', 'deepseek', calendars), 'unknown');
 });

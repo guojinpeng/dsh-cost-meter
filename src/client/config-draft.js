@@ -33,6 +33,7 @@ export function configOf(draft) {
 			...Object.fromEntries(RATE_KEYS.map((key) => [key, Number(row[key])])),
 			currency: row.currency,
 			...(typeof row.autoOffPeak === 'boolean' ? { autoOffPeak: row.autoOffPeak } : {}),
+			...(row.peakRule ? { peakRule: row.peakRule } : {}),
 			...(row.source ? { source: row.source } : {}),
 		};
 	}

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PRICE_SOURCES } from '../price-sources.js';
+import { PEAK_RULE_IDS } from '../time-of-use.js';
 
 const int = z.number().int().nonnegative();
 
@@ -117,6 +118,7 @@ const rateSchema = z
 		cacheWrite: z.number().nonnegative(),
 		currency: z.enum(['USD', 'CNY']).optional(),
 		autoOffPeak: z.boolean().optional(),
+		peakRule: z.enum(PEAK_RULE_IDS).optional(),
 		source: z.enum([...PRICE_SOURCES, 'manual']).optional(),
 	})
 	.strict();
