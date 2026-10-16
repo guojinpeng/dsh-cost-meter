@@ -175,6 +175,10 @@ test('multiple models and live prices agree for session and turn', () => {
 	assert.equal(view.totalMicros, 2200);
 	assert.equal(view.turns['1'].micros, 2200);
 	assert.equal(view.turns['1'].bucketMicros.input, 1100);
+	assert.deepEqual(
+		view.turns['1'].routes.map((entry) => entry.route),
+		['p/a', 'p/b'],
+	);
 	assert.strictEqual(projection.wire.view(state), view);
 	config.pricing['p/a'] = rate(2);
 	const changed = projection.wire.view(state);
@@ -237,6 +241,17 @@ test('timestamp replacement moves usage between periods without counting tokens 
 	assert.equal(view.turns['1'].amounts[0].micros, 200);
 	assert.equal(view.offPeakTokens, 200);
 	assert.equal(view.peakTokens, 0);
+	const turnRoute = view.turns['1'].routes[0];
+	const money = Object.values(turnRoute.periodMicros).flatMap((entry) => Object.values(entry));
+	assert.equal(
+		money.reduce((sum, value) => sum + value, 0),
+		view.turns['1'].amounts[0].micros,
+	);
+	const tokens = Object.values(turnRoute.tokensByPeriod).flatMap((entry) => Object.values(entry));
+	assert.equal(
+		tokens.reduce((sum, value) => sum + value, 0),
+		view.turns['1'].totalTokens,
+	);
 	host.stateSchema.parse(state);
 });
 

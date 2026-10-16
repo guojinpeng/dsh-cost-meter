@@ -153,13 +153,27 @@ try {
 	if (mixed) {
 		assert.ok((await page.locator('.gdcc_titleValue').textContent()).includes('¥'));
 		assert.ok((await page.locator('.gdcc_titleValue').textContent()).includes('$'));
-		assert.ok(
-			await page
-				.locator('.gdcc_panel')
-				.getByText(language === 'en' ? 'Off-peak tokens' : '谷期 token', { exact: true })
-				.isVisible(),
-		);
+		for (const label of [
+			language === 'en' ? 'Peak price' : '峰价',
+			language === 'en' ? 'Off-peak price' : '谷价',
+			language === 'en' ? 'Fixed price' : '固定价',
+		])
+			assert.ok(
+				await page.locator('.gdcc_panel').getByText(label, { exact: true }).first().isVisible(),
+				label + ' group is shown',
+			);
 	}
+	const info = page.locator('.gdcc_panel .gdcc_amount .gdcc_info').first();
+	const hint = page.locator('.gdcc_hintPanel');
+	await info.hover();
+	await hint.waitFor();
+	const hintText = await hint.textContent();
+	assert.ok(hintText.includes('÷'), 'the hint panel shows the price formula');
+	assert.ok(!hintText.includes('1M tok'), 'the hint panel holds the formula only');
+	await info.click();
+	assert.equal(await hint.count(), 1, 'a click does not pin the hint');
+	await page.mouse.move(0, 0);
+	await hint.waitFor({ state: 'detached' });
 	await page.locator('.gdcc_panel').screenshot({ path: join(screenshotDir, 'session-cost.png') });
 	await page.keyboard.press('Escape');
 	await page.locator('.gdcc_turnTrigger').click();
@@ -167,7 +181,24 @@ try {
 		.locator('.gdcc_panel')
 		.getByText(language === 'en' ? 'Turn cost' : '本轮费用', { exact: true })
 		.waitFor();
+	if (mixed) {
+		for (const label of [
+			language === 'en' ? 'Uncached input' : '未缓存输入',
+			language === 'en' ? 'Output' : '输出',
+		])
+			assert.ok(
+				await page.locator('.gdcc_panel').getByText(label, { exact: true }).first().isVisible(),
+				'the turn panel shows the ' + label + ' price row',
+			);
+	}
 	await page.locator('.gdcc_panel').screenshot({ path: join(screenshotDir, 'turn-cost.png') });
+	if (mixed) {
+		await page.locator('.gdcc_panel .gdcc_amount .gdcc_info').first().hover();
+		await hint.waitFor();
+		assert.ok((await hint.textContent()).includes('÷'), 'the turn hint panel shows the price formula');
+		await page.mouse.move(0, 0);
+		await hint.waitFor({ state: 'detached' });
+	}
 	assert.deepEqual(errors, []);
 	console.log('Session and turn cost screenshots created from real components with example accounting.');
 } finally {

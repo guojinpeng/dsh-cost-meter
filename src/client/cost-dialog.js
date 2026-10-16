@@ -201,7 +201,7 @@ export function createCostDialog(react, reactDom) {
 		return reactDom.createPortal(
 			h(`div`, {
 				ref: props.panelRef,
-				className: `gdcc_panel`,
+				className: props.className ? `gdcc_panel ` + props.className : `gdcc_panel`,
 				role: `dialog`,
 				'aria-label': props.title,
 				style: props.pos ?? MEASURE_STYLE,
@@ -211,7 +211,9 @@ export function createCostDialog(react, reactDom) {
 							h(props.icon, { key: `i` }),
 							h(`span`, { key: `t` }, props.title),
 						]),
-						h(`span`, { className: `gdcc_titleValue`, key: `v` }, props.value),
+						props.value === null || props.value === undefined
+							? null
+							: h(`span`, { className: `gdcc_titleValue`, key: `v` }, props.value),
 					]),
 					h(`div`, { className: `gdcc_titleRule`, key: `rule` }),
 					react.Children.toArray(props.children),
@@ -221,5 +223,59 @@ export function createCostDialog(react, reactDom) {
 		);
 	}
 
-	return { useCostDialog, panel, details, IconGaugeOutlineRegular, IconInfoOutlineRegular };
+	/**
+	 * Inline information button with a formula popover. Hovering opens the
+	 * popover and leaving closes it; a click does not pin it. The popover
+	 * ignores pointer events so it never steals the pointer from the surface
+	 * that owns it.
+	 */
+	function Hint(props) {
+		const [open, setOpen] = react.useState(false);
+		const rootRef = react.useRef(null);
+		const panelRef = react.useRef(null);
+		const pos = useAnchoredPosition({
+			open,
+			anchorRef: rootRef,
+			panelRef,
+			side: `top`,
+			gap: 6,
+			margin: PANEL_MARGIN,
+		});
+		return h(
+			`span`,
+			{
+				className: `gdcc_hintRoot`,
+				ref: rootRef,
+				onMouseEnter: () => setOpen(true),
+				onMouseLeave: () => setOpen(false),
+			},
+			[
+				h(
+					`button`,
+					{
+						key: `b`,
+						type: `button`,
+						className: `gdcc_info`,
+						'aria-label': props.label,
+						'aria-haspopup': `dialog`,
+						'aria-expanded': open,
+					},
+					h(IconInfoOutlineRegular, { key: `i` }),
+				),
+				open
+					? panel({
+							panelRef,
+							pos,
+							className: `gdcc_hintPanel`,
+							icon: IconInfoOutlineRegular,
+							title: props.title,
+							value: null,
+							children: props.children,
+						})
+					: null,
+			],
+		);
+	}
+
+	return { useCostDialog, panel, details, Hint, IconGaugeOutlineRegular, IconInfoOutlineRegular };
 }

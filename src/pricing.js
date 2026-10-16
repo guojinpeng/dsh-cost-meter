@@ -3,6 +3,14 @@ import { PRICE_SOURCES } from './price-sources.js';
 
 export const RATE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite'];
 export const zeroRate = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+
+/** Wire fields of a priced period. */
+const FIELDS = ['input', 'output', 'read', 'write'];
+/** Period keys a route reports money and tokens for. */
+const PERIODS = ['peak', 'offPeak', 'fixed', 'unknown'];
+const zeroFields = () => ({ input: 0, output: 0, read: 0, write: 0 });
+const roundFields = (fields) =>
+	Object.fromEntries(FIELDS.map((field) => [field, Math.round(fields[field])]));
 export const newRate = () => ({ ...zeroRate(), currency: 'USD', autoOffPeak: false });
 
 export function convertRateCurrency(rate, currency, cnyPerUsd) {
@@ -71,9 +79,12 @@ function priceRoutes(byRoute, config, byTime = {}, calendars = {}) {
 		const currency = rate?.currency ?? 'USD';
 		const usdFactor = currency === 'CNY' ? 1 / config.cnyPerUsd : 1;
 		let amount = 0;
+		const periodParts = Object.fromEntries(PERIODS.map((period) => [period, zeroFields()]));
+		const periodTokens = Object.fromEntries(PERIODS.map((period) => [period, zeroFields()]));
+		let rates = null;
 		if (rate === null) unpricedTokens += totalTokens;
 		else {
-			const parts = { input: 0, output: 0, read: 0, write: 0 };
+			const parts = zeroFields();
 			const rule = peakRule(rate.peakRule);
 			const samples = rate.autoOffPeak
 				? Object.entries(byTime[key] ?? { unknown: buckets })
@@ -84,24 +95,48 @@ function priceRoutes(byRoute, config, byTime = {}, calendars = {}) {
 				if (period === 'peak') peakTokens += tokensOf(sample);
 				if (period === 'offPeak') offPeakTokens += tokensOf(sample);
 				if (period === 'unknown') uncertainTokens += tokensOf(sample);
-				parts.input += sample.uncachedInputTokens * rate.input * factor;
-				parts.output += sample.outputTokens * rate.output * factor;
-				parts.read += sample.cacheReadTokens * rate.cacheRead * factor;
-				parts.write += sample.cacheWriteTokens * rate.cacheWrite * factor;
+				const sampleParts = {
+					input: sample.uncachedInputTokens * rate.input * factor,
+					output: sample.outputTokens * rate.output * factor,
+					read: sample.cacheReadTokens * rate.cacheRead * factor,
+					write: sample.cacheWriteTokens * rate.cacheWrite * factor,
+				};
+				const sampleTokens = {
+					input: sample.uncachedInputTokens,
+					output: sample.outputTokens,
+					read: sample.cacheReadTokens,
+					write: sample.cacheWriteTokens,
+				};
+				for (const field of FIELDS) {
+					parts[field] += sampleParts[field];
+					periodParts[period][field] += sampleParts[field];
+					periodTokens[period][field] += sampleTokens[field];
+				}
 			}
 			amount = Object.values(parts).reduce((sum, value) => sum + value, 0);
 			micros += amount * usdFactor;
 			const group = amounts.get(currency) ?? {
 				currency,
 				micros: 0,
-				bucketMicros: { input: 0, output: 0, read: 0, write: 0 },
+				bucketMicros: zeroFields(),
+				periodMicros: Object.fromEntries(PERIODS.map((period) => [period, zeroFields()])),
 			};
 			group.micros += amount;
-			for (const field of Object.keys(parts)) {
+			for (const field of FIELDS) {
 				bucketMicros[field] += parts[field] * usdFactor;
 				group.bucketMicros[field] += parts[field];
 			}
+			for (const period of PERIODS)
+				for (const field of FIELDS) group.periodMicros[period][field] += periodParts[period][field];
 			amounts.set(currency, group);
+			rates = {
+				input: rate.input,
+				output: rate.output,
+				read: rate.cacheRead,
+				write: rate.cacheWrite,
+				factor: rule.factor,
+				rule: rule.id,
+			};
 		}
 		routes.push({
 			route: key,
@@ -110,13 +145,17 @@ function priceRoutes(byRoute, config, byTime = {}, calendars = {}) {
 			micros: Math.round(amount * usdFactor),
 			totalTokens,
 			priced: rate !== null,
+			periodMicros: Object.fromEntries(PERIODS.map((period) => [period, roundFields(periodParts[period])])),
+			tokensByPeriod: periodTokens,
+			...(rates === null ? {} : { rates }),
 		});
 	}
-	for (const key of Object.keys(bucketMicros)) bucketMicros[key] = Math.round(bucketMicros[key]);
+	for (const key of FIELDS) bucketMicros[key] = Math.round(bucketMicros[key]);
 	for (const group of amounts.values()) {
 		group.micros = Math.round(group.micros);
-		for (const key of Object.keys(group.bucketMicros))
-			group.bucketMicros[key] = Math.round(group.bucketMicros[key]);
+		for (const key of FIELDS) group.bucketMicros[key] = Math.round(group.bucketMicros[key]);
+		for (const period of PERIODS)
+			for (const field of FIELDS) group.periodMicros[period][field] = Math.round(group.periodMicros[period][field]);
 	}
 	return {
 		micros: Math.round(micros),
@@ -155,6 +194,7 @@ export function buildCostView(accounting, config) {
 			uncertainTokens: priced.uncertainTokens,
 			totalTokens: entry.totalTokens,
 			route: Object.keys(entry.byRoute).join(', '),
+			routes: priced.routes,
 			tokens: wireTokens(entry.tokens),
 			bucketMicros: priced.bucketMicros,
 			priced: priced.unpricedTokens === 0,

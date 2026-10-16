@@ -46,9 +46,48 @@ export const stateSchema = z
 	.strict();
 
 const wireTokensSchema = z.object({ input: int, output: int, read: int, write: int }).strict();
+const wirePeriodSchema = z
+	.object({
+		peak: wireTokensSchema,
+		offPeak: wireTokensSchema,
+		fixed: wireTokensSchema,
+		unknown: wireTokensSchema,
+	})
+	.strict();
+const wireRatesSchema = z
+	.object({
+		input: z.number().nonnegative(),
+		output: z.number().nonnegative(),
+		read: z.number().nonnegative(),
+		write: z.number().nonnegative(),
+		factor: z.number().nonnegative(),
+		rule: z.enum(PEAK_RULE_IDS),
+	})
+	.strict();
 const amountsSchema = z.array(
-	z.object({ currency: z.enum(['USD', 'CNY']), micros: int, bucketMicros: wireTokensSchema }).strict(),
+	z
+		.object({
+			currency: z.enum(['USD', 'CNY']),
+			micros: int,
+			bucketMicros: wireTokensSchema,
+			periodMicros: wirePeriodSchema,
+		})
+		.strict(),
 );
+
+const wireRouteSchema = z
+	.object({
+		route: z.string(),
+		micros: int,
+		currency: z.enum(['USD', 'CNY']),
+		amountMicros: int,
+		totalTokens: int,
+		priced: z.boolean(),
+		periodMicros: wirePeriodSchema,
+		tokensByPeriod: wirePeriodSchema,
+		rates: wireRatesSchema.optional(),
+	})
+	.strict();
 
 const wireTurnSchema = z
 	.object({
@@ -59,21 +98,11 @@ const wireTurnSchema = z
 		uncertainTokens: int,
 		totalTokens: int,
 		route: z.string(),
+		routes: z.array(wireRouteSchema),
 		tokens: wireTokensSchema,
 		bucketMicros: wireTokensSchema,
 		priced: z.boolean(),
 		recovered: z.boolean(),
-	})
-	.strict();
-
-const wireRouteSchema = z
-	.object({
-		route: z.string(),
-		micros: int,
-		currency: z.enum(['USD', 'CNY']),
-		amountMicros: int,
-		totalTokens: int,
-		priced: z.boolean(),
 	})
 	.strict();
 

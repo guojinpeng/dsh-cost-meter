@@ -46,8 +46,17 @@ export function formatAmounts(amounts, compact = false) {
 		.join(' · ');
 }
 
-export function formatAmountBucket(amounts, field) {
-	return formatAmounts(
-		amounts.map((entry) => ({ currency: entry.currency, micros: entry.bucketMicros[field] })),
-	);
+/**
+ * Money of one display group (peak, off-peak, or fixed) in every charged
+ * currency. Returns null when no currency charges this row, so callers can
+ * drop zero rows.
+ */
+export function formatAmountPeriod(amounts, periods, field) {
+	const entries = amounts
+		.map((entry) => ({
+			currency: entry.currency,
+			micros: periods.reduce((sum, period) => sum + (entry.periodMicros?.[period]?.[field] ?? 0), 0),
+		}))
+		.filter((entry) => entry.micros > 0);
+	return entries.length === 0 ? null : formatAmounts(entries);
 }

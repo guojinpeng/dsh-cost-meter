@@ -28,7 +28,8 @@ GitHub 用于保存源码和发布说明。
 
 - 显示会话费用和已完成轮次的费用估算。
 - 模型价格尚未就绪时显示简短的“初始化中”提示。
-- 显示输入、输出、缓存读取和缓存写入的费用明细。
+- 费用明细按峰价、谷价和固定价分组，每组列出未缓存输入、缓存读取、缓存写入和输出四项价格；金额为 0 的价格行不显示，不显示高峰和谷期 token。会话明细先按三组显示四项价格，再按模型显示各组汇总；本轮明细按模型列出各组的四项价格。
+- 每个价格后有感叹号按钮：鼠标悬停只显示该价格的计算公式，移开即关闭。
 - 按提供方分组显示模型。模型列表来自 DSH 调用历史。
 - 按完整的 `provider/model` 名称分别设置单价。
 - 可选择 models.dev、openrouter.ai 或 api.deepinfra.com 作为价格来源。
@@ -93,10 +94,10 @@ npm pack
 ```
 
 `npm pack` 也会执行构建，生成 `guojinpeng-dsh-cost-meter-<版本号>.tgz`。
-将生成的文件安装到你的 DSH profile。以 0.3.0 为例：
+将生成的文件安装到你的 DSH profile。以 0.3.1 为例：
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.0.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.1.tgz
 ```
 
 重启 DSH，检查插件。每次修改后，重新构建、打包并安装。

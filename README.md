@@ -28,7 +28,9 @@ GitHub contains the source code and release notes.
 
 - Shows session and completed-turn cost estimates.
 - Shows a short initialization message when model prices are not ready.
-- Shows input, output, cache-read and cache-write cost details.
+- Groups the details by peak price, off-peak price and fixed price. Hides price rows that cost zero and shows no peak or off-peak token counts.
+- The session panel groups the four prices by peak, off-peak and fixed price, then lists each model's group sums. The turn panel lists the four prices of every group for each model.
+- Each price has an info button: hover it to see the calculation formula for that price. The popover closes when the pointer leaves.
 - Groups used models by provider. The list comes from DSH session history.
 - Supports separate prices for each full `provider/model` name.
 - Selects models.dev, openrouter.ai or api.deepinfra.com as the price source.
@@ -93,10 +95,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.3.0:
+Install the generated file in your DSH profile. For version 0.3.1:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.0.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.1.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.

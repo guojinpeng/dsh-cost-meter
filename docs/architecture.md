@@ -37,7 +37,7 @@
 | `client/config-page.js` | Settings page composition / 配置页面装配 |
 | `client/form-controls.js`, `client/pricing-table.js` | Form controls and provider/model price rows with per-model peak rules / 表单控件、按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
-| `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips and popover interactions / 费用标签、明细弹层和定位交互 |
+| `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |
 | `client/styles.css`, `client/styles.js` | Stylesheet and idempotent injection / 样式文件及防重复注入 |
 
@@ -53,7 +53,7 @@ The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text
 - Keep official token/retry folds and turn retention. Projection state version 4 preserves `event.time` and partitions tokens by route, Beijing date and one of seven clock windows. DSH replays old checkpoint data from the durable log.
 - Keep revision checks and the re-read after network initialization. Manual prices must win over delayed initialization.
 - Keep draft values as strings while editing. Validate and convert them before saving.
-- Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; legacy `micros` fields remain expressed in USD for compatibility.
+- Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; every amount group and route also carries `periodMicros` and `tokensByPeriod` for the peak, off-peak, fixed and unknown windows. Legacy `micros` fields remain expressed in USD for compatibility. Rows and groups with zero money stay hidden in the client.
 - Preserve current error strings. Error localization is a separate behavior change.
 
 ## Pricing And Cache / 价格与缓存
@@ -70,7 +70,7 @@ OpenRouter converts USD/token strings by multiplying by 1,000,000. DeepInfra con
 
 holiday-cn data is stored under `data/holidays/<year>.json`. Files contain holiday/weekend dates and source metadata. Under the DeepSeek peak rule, weekends and holidays remain off-peak even on adjusted working days; the Alibaba Cloud and GLM rules never read this calendar. Date and clock buckets stay in the projection, so calendars can reprice past usage without rewriting token counts. The configuration response carries loaded calendars; the shared client store polls the local endpoint only while discovery or calendar requests are pending.
 
-日历缺失时异步获取，不阻塞界面。只对无法确认的工作日高峰窗口暂用高峰价，并在费用明细中记录未确认 token。未知时间不能用当前时间补算。日历到齐后，前端使用原有计费分桶重新计算；不通过大模型调用峰谷工具。
+日历缺失时异步获取，不阻塞界面。只对无法确认的工作日高峰窗口暂用高峰价，未确认时段的金额暂计入“峰价”组显示，并在费用明细中记录未确认 token。未知时间不能用当前时间补算。日历到齐后，前端使用原有计费分桶重新计算；不通过大模型调用峰谷工具。
 
 Source references / 数据来源：
 

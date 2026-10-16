@@ -161,8 +161,21 @@ test('dated peak/off-peak buckets reprice when the calendar arrives; legacy entr
 	assert.equal(resolved.totalMicros, 3000000);
 	assert.equal(resolved.peakTokens, 1000000);
 	assert.equal(resolved.offPeakTokens, 1000000);
+	const route = resolved.routes[0];
+	assert.equal(route.periodMicros.peak.input, 2000000);
+	assert.equal(route.periodMicros.offPeak.input, 1000000);
+	assert.equal(route.periodMicros.unknown.input, 0);
+	assert.equal(route.tokensByPeriod.peak.input, 1000000);
+	assert.equal(route.tokensByPeriod.offPeak.input, 1000000);
+	assert.deepEqual(route.rates, { input: 2, output: 0, read: 0, write: 0, factor: 0.5, rule: 'deepseek' });
+	assert.equal(resolved.amounts[0].periodMicros.peak.input, 2000000);
+	assert.equal(resolved.amounts[0].periodMicros.offPeak.input, 1000000);
 	delete config.pricing[key].autoOffPeak;
-	assert.equal(buildCostView({ ...accounting, calendars }, config).totalMicros, 4000000);
+	const legacy = buildCostView({ ...accounting, calendars }, config);
+	assert.equal(legacy.totalMicros, 4000000);
+	assert.equal(legacy.routes[0].periodMicros.fixed.input, 4000000);
+	assert.equal(legacy.routes[0].tokensByPeriod.fixed.input, 2000000);
+	assert.equal(legacy.routes[0].periodMicros.peak.input, 0);
 });
 
 test('the off-peak flag applies to any provider under its selected rule', () => {
@@ -201,11 +214,20 @@ test('each model prices its own clock windows with its own rule', () => {
 	// DeepSeek: 10:00 weekday peak, 23:00 off-peak.
 	assert.equal(priced('deepseek').totalMicros, 3000000);
 	// Alibaba Cloud: 10:00 busy, 23:00 off-peak.
-	assert.equal(priced('aliyun').totalMicros, 3000000);
-	assert.equal(priced('aliyun').peakTokens, 1000000);
+	const aliyun = priced('aliyun');
+	assert.equal(aliyun.totalMicros, 3000000);
+	assert.equal(aliyun.peakTokens, 1000000);
+	assert.equal(aliyun.routes[0].periodMicros.peak.input, 2000000);
+	assert.equal(aliyun.routes[0].periodMicros.offPeak.input, 1000000);
+	assert.equal(aliyun.routes[0].tokensByPeriod.peak.input, 1000000);
+	assert.equal(aliyun.routes[0].rates.rule, 'aliyun');
 	// Zhipu GLM: only 14:00-18:00 is peak, so both windows are off-peak.
-	assert.equal(priced('glm').totalMicros, 2000000);
-	assert.equal(priced('glm').offPeakTokens, 2000000);
+	const glm = priced('glm');
+	assert.equal(glm.totalMicros, 2000000);
+	assert.equal(glm.offPeakTokens, 2000000);
+	assert.equal(glm.routes[0].periodMicros.offPeak.input, 2000000);
+	assert.equal(glm.routes[0].periodMicros.peak.input, 0);
+	assert.equal(glm.routes[0].rates.rule, 'glm');
 });
 
 test('an unknown rule falls back to DeepSeek; a malformed bucket stays uncertain', () => {

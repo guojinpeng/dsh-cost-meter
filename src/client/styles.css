@@ -175,6 +175,58 @@
 	color: var(--dsw-alias-label-tertiary);
 	margin-top: 10px;
 }
+.gdcc_divider {
+	border-top: 0.5px solid var(--dsw-alias-border-l2);
+	margin: 12px 0;
+}
+.gdcc_routeBlock {
+	margin-bottom: 10px;
+}
+.gdcc_routeName {
+	color: var(--dsw-alias-label-primary);
+	margin-bottom: 6px;
+	overflow-wrap: anywhere;
+}
+.gdcc_amount {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+.gdcc_hintRoot {
+	display: inline-flex;
+	align-items: center;
+}
+.gdcc_hintPanel {
+	pointer-events: none;
+}
+.gdcc_hintModel {
+	color: var(--dsw-alias-label-primary);
+	margin: 8px 0 2px;
+	overflow-wrap: anywhere;
+}
+.gdcc_hintModel:first-child {
+	margin-top: 0;
+}
+.gdcc_hintField {
+	color: var(--dsw-alias-label-secondary);
+	margin: 6px 0 2px;
+}
+.gdcc_hintField:first-child {
+	margin-top: 0;
+}
+.gdcc_hintLine {
+	color: var(--dsw-alias-label-tertiary);
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.gdcc_hintRoot .gdcc_info {
+	width: 16px;
+	height: 16px;
+}
+.gdcc_hintRoot .gdcc_info svg {
+	width: 12px;
+	height: 12px;
+}
 /* Plugin configuration page. */
 .gdcc_form {
 	border: 0;
