@@ -1,149 +1,170 @@
-import { createFormControls } from './form-controls.js';
-import { createPricingTable } from './pricing-table.js';
 import { PRICE_SOURCES } from '../price-sources.js';
+import { invalidCnyPerUsd } from './config-draft.js';
+import { createPricingTable } from './pricing-table.js';
 
-export function createConfigPage(react, useConfigController, dialogs) {
+export function createConfigPage(react, ui, useConfigController, dialogs) {
 	const h = react.createElement;
-	const { field, numberInput } = createFormControls(react);
-	const PricingTable = createPricingTable(react, numberInput, dialogs);
+	const { Button, SettingsForm, SettingsValueField, Switch } = ui;
+	const PricingTable = createPricingTable(react, ui, dialogs);
+
 	return function CostConfigCard({ t }) {
-		const {
-			draft,
-			busy,
-			invalid,
-			saving,
-			error,
-			notice,
-			syncDetails,
-			patch,
-			rowPatch,
-			currency,
-			sync,
-			flush,
-			retry,
-		} = useConfigController(t);
-		if (!draft)
-			return h('div', { className: error ? 'gdcc_error' : 'gdcc_hint' }, [
-				h('span', { key: 'message' }, error || t('configLoading')),
-				error
-					? h(
-							'button',
-							{
-								key: 'retry',
-								className: 'gdcc_expand',
-								title: t('configRetryLoad'),
-								'aria-label': t('configRetryLoad'),
-								onClick: retry,
-							},
-							'↻',
-						)
+		const config = useConfigController(t);
+		const [model, setModel] = react.useState('');
+
+		if (!config.available)
+			return h('div', { className: config.loadError ? 'gdcc_error' : 'gdcc_hint' }, [
+				h(
+					'span',
+					{ key: 'message' },
+					config.loadError ? t('configLoadFailed', { message: config.loadError }) : t('configLoading'),
+				),
+				config.loadError
+					? h(Button, { key: 'retry', variant: 'outline', size: 'sm', onClick: config.retry }, t('configRetryLoad'))
 					: null,
 			]);
-		return h('fieldset', { className: 'gdcc_form', disabled: busy }, [
-			h('details', { key: 'basic', className: 'gdcc_section' }, [
-				h('summary', { key: 'title' }, t('configBasic')),
-				h('div', { key: 'content', className: 'gdcc_sectionBody' }, [
-					h('div', { key: 'toolbar', className: 'gdcc_tableToolbar' }, [
-						h('div', { key: 'source', className: 'gdcc_syncControls' }, [
-							h('label', { key: 'label', className: 'gdcc_sourceLabel' }, [
-								h('span', { key: 'from' }, t('configFrom')),
+
+		const { draft } = config;
+		const submitModel = () => {
+			if (config.addModel(model)) setModel('');
+		};
+
+		return h('div', { className: 'gdcc_configCard' }, [
+			h(
+				SettingsForm,
+				{
+					key: 'form',
+					labels: {
+						unavailable: t('configLoading'),
+						readOnly: '',
+						saveFailed: config.error ?? '',
+						save: t('configSave'),
+						saving: t('configSaving'),
+					},
+					state: {
+						available: true,
+						writable: true,
+						dirty: config.dirty,
+						invalid: config.invalid,
+						saving: config.saving,
+						failed: config.error !== null,
+					},
+					onSave: config.save,
+					onDiscard: config.discard,
+				},
+				[
+					h('section', { key: 'pricing', className: 'gdcc_section', 'aria-labelledby': 'gdcc-pricing-title' }, [
+						h('div', { key: 'head', className: 'gdcc_sectionHead' }, [
+							h('div', { key: 'titles', className: 'gdcc_sectionTitleGroup' }, [
+								h('h3', { key: 'title', id: 'gdcc-pricing-title', className: 'gdcc_sectionTitle' }, t('configPricing')),
+								h('span', { key: 'unit', className: 'gdcc_hint gdcc_sectionHint' }, t('configPricingUnit')),
+							]),
+							h('div', { key: 'add', className: 'gdcc_addModel' }, [
+								h('input', {
+									key: 'input',
+									className: 'gdcc_input',
+									type: 'text',
+									value: model,
+									placeholder: t('configAddModelPlaceholder'),
+									'aria-label': t('configAddModel'),
+									...(config.addError ? { 'aria-invalid': 'true' } : {}),
+									onChange: (event) => setModel(event.target.value),
+									onKeyDown: (event) => {
+										if (event.key !== 'Enter') return;
+										event.preventDefault();
+										submitModel();
+									},
+								}),
+								h(Button, { key: 'button', variant: 'outline', size: 'sm', onClick: submitModel }, t('configAddModel')),
+							]),
+						]),
+						config.addError ? h('p', { key: 'addError', className: 'gdcc_invalid' }, config.addError) : null,
+						h('div', { key: 'sync', className: 'gdcc_syncRow' }, [
+							h('label', { key: 'label', className: 'gdcc_syncLabel' }, [
+								h('span', { key: 'text' }, t('configPriceSource')),
 								h(
 									'select',
 									{
 										key: 'select',
-										className: 'gdcc_input',
+										className: 'gdcc_select',
 										value: draft.priceSource,
 										'aria-label': t('configPriceSource'),
-										onChange: (event) => patch('priceSource', event.target.value),
+										disabled: config.saving || config.syncing,
+										onChange: (event) => config.patch('priceSource', event.target.value),
 									},
 									PRICE_SOURCES.map((source) => h('option', { key: source, value: source }, source)),
 								),
 							]),
 							h(
-								'button',
+								Button,
 								{
-									key: 'sync',
-									type: 'button',
-									className: 'gdcc_btn',
-									disabled: busy || !!error,
-									onClick: sync,
+									key: 'button',
+									variant: 'outline',
+									size: 'sm',
+									disabled: config.invalid || config.saving || config.syncing,
+									onClick: config.sync,
 								},
-								busy ? t('configSyncing') : t('configSync'),
+								config.syncing ? t('configSyncing') : t('configSync'),
 							),
-						]),
-					]),
-					syncDetails.length
-						? h(
-								'ul',
-								{ key: 'report', className: 'gdcc_syncReport' },
-								syncDetails.map((entry, index) =>
-									h(
-										'li',
-										{ key: `${entry.route}:${index}` },
-										`${entry.route}: ${t(`syncReason_${entry.reason}`)}`,
-									),
-								),
-							)
-						: null,
-					h(
-						'span',
-						{ key: 'title', className: 'gdcc_hint gdcc_tableTitle' },
-						`${t('configPricing')} / 1M tokens`,
-					),
-					h(PricingTable, { key: 'rows', rows: draft.rows, rowPatch, currency, flush, t }),
-				]),
-			]),
-			h('details', { key: 'advanced', className: 'gdcc_section' }, [
-				h('summary', { key: 'title' }, t('configAdvanced')),
-				h('div', { key: 'content', className: 'gdcc_sectionBody gdcc_fields' }, [
-					field(
-						t('configCnyPerUsd'),
-						react.cloneElement(
-							numberInput(draft.cnyPerUsd, (value) => patch('cnyPerUsd', value)),
-							{ 'aria-label': t('configCnyPerUsd'), min: 0, onBlur: flush },
-						),
-						'exchange',
-					),
-					...['showDockChip', 'showTurnChip'].map((key) =>
-						field(
-							t(key === 'showDockChip' ? 'configShowDockChip' : 'configShowTurnChip'),
-							h('input', {
-								type: 'checkbox',
-								role: 'switch',
-								className: 'gdcc_input',
-								checked: draft[key],
-								'aria-label': t(key === 'showDockChip' ? 'configShowDockChip' : 'configShowTurnChip'),
-								onChange: (event) => patch(key, event.target.checked),
-							}),
-							key,
-						),
-					),
-				]),
-			]),
-			h(
-				'div',
-				{ key: 'status', className: 'gdcc_saveStatus', role: 'status', 'aria-live': 'polite' },
-				error
-					? [
-							h('span', { key: 'error', className: 'gdcc_error' }, error),
-							!invalid
-								? h(
-										'button',
-										{
-											key: 'retry',
-											type: 'button',
-											className: 'gdcc_expand',
-											title: t('configRetry'),
-											'aria-label': t('configRetry'),
-											onClick: retry,
-										},
-										'↻',
-									)
+							config.notice
+								? h('span', { key: 'notice', className: 'gdcc_syncNotice', role: 'status', 'aria-live': 'polite' }, config.notice)
 								: null,
-						]
-					: saving
-						? t('configSaving')
-						: notice,
+							config.syncError
+								? h('span', { key: 'syncError', className: 'gdcc_error', role: 'alert' }, config.syncError)
+								: null,
+						]),
+						config.details.length
+							? h(
+									'ul',
+									{ key: 'report', className: 'gdcc_syncReport' },
+									config.details.map((entry, index) =>
+										h('li', { key: `${entry.route}:${index}` }, `${entry.route}: ${t(`syncReason_${entry.reason}`)}`),
+									),
+								)
+							: null,
+						h(PricingTable, {
+							key: 'rows',
+							rows: draft.rows,
+							rowPatch: config.rowPatch,
+							setCurrency: config.setCurrency,
+							removeModel: config.removeModel,
+							discovered: config.discovered,
+							t,
+						}),
+					]),
+					h('section', { key: 'general', className: 'gdcc_section', 'aria-labelledby': 'gdcc-general-title' }, [
+						h('h3', { key: 'title', id: 'gdcc-general-title', className: 'gdcc_sectionTitle' }, t('configSectionGeneral')),
+						h(SettingsValueField, {
+							key: 'rate',
+							id: 'gdcc-cny-per-usd',
+							label: t('configCnyPerUsd'),
+							text: draft.cnyPerUsd,
+							numeric: true,
+							invalid: invalidCnyPerUsd(draft.cnyPerUsd),
+							invalidLabel: t('configInvalidRate'),
+							overridden: false,
+							overriddenLabel: '',
+							resetLabel: '',
+							disabled: config.saving,
+							onEdit: (value) => config.patch('cnyPerUsd', value),
+							onReset: () => {},
+						}),
+						...[
+							['showDockChip', t('configShowDockChip')],
+							['showTurnChip', t('configShowTurnChip')],
+						].map(([key, label]) =>
+							h('div', { key, className: 'gdcc_switchRow' }, [
+								h('span', { key: 'label', className: 'gdcc_switchLabel' }, label),
+								h(Switch, {
+									key: 'switch',
+									checked: draft[key] === true,
+									label,
+									disabled: config.saving,
+									onChange: (value) => config.patch(key, value),
+								}),
+							]),
+						),
+					]),
+				],
 			),
 		]);
 	};

@@ -21,6 +21,12 @@ export function reconcileConfig(config, models) {
 	return { ...config, formatVersion: 2, pricing };
 }
 
+/** Routes the user declared in the config, found in history or not. */
+export const configuredKeys = (config) => Object.keys(config.pricing ?? {}).filter((key) => parseRouteKey(key));
+
+/** The model set the config page lists: history routes plus declared routes. */
+export const allModels = (models, config) => [...new Set([...models, ...configuredKeys(config)])].sort();
+
 export function createHistoryModels(
 	sessionQuery,
 	{ readConfig, writeConfig, backupConfig, initializePrices, onError = () => {} },
@@ -60,7 +66,7 @@ export function createHistoryModels(
 		// Re-read after network I/O so initialization never overwrites a manual edit.
 		const latest = readConfig(true);
 		const seeded = { ...latest, pricing: { ...initialized, ...latest.pricing } };
-		const next = reconcileConfig(seeded, [...models].sort());
+		const next = reconcileConfig(seeded, allModels(models, seeded));
 		if (JSON.stringify(next) !== JSON.stringify(latest)) {
 			if (latest.formatVersion !== 2) backupConfig();
 			writeConfig(next);
@@ -70,10 +76,11 @@ export function createHistoryModels(
 	const service = {
 		list: () =>
 			ready
-				? [...models].sort()
+				? allModels(models, readConfig())
 				: Object.keys(readConfig().pricing)
 						.filter((key) => parseRouteKey(key))
 						.sort(),
+		discovered: () => [...models].sort(),
 		years: () => [...years],
 		ready: () => ready,
 		pending: () => active > 0,
@@ -119,8 +126,10 @@ export function createHistoryModels(
 				active--;
 			}
 		},
-		save: (config) =>
-			writeConfig(reconcileConfig({ ...readConfig(true), ...config, formatVersion: 2 }, [...models].sort())),
+		save: (config) => {
+			const next = { ...readConfig(true), ...config, formatVersion: 2 };
+			return writeConfig(reconcileConfig(next, allModels(models, next)));
+		},
 	};
 	return service;
 }

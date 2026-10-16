@@ -43,6 +43,7 @@ async function configPayload(history, holidays, wait = false) {
 	return {
 		config,
 		models: history.list(),
+		discovered: history.discovered?.() ?? history.list(),
 		revision: revisionOf(config),
 		path: CONFIG_PATH,
 		...(holidays ? { calendars: holidays.snapshot(), calendarPending: holidays.pending() } : {}),
@@ -95,11 +96,18 @@ export function createConfigHandler(connection, history, prices = createPriceSer
 								respond(res, 400, { error: 'Unsupported price source' });
 								return;
 							}
-							if (parsed.source !== resolvedPriceSource(before.config)) {
+							// A staged config means preview only: the client saves the result itself.
+							const staged = parsed.config !== undefined;
+							const base = staged ? configInputSchema.parse(parsed.config) : before.config;
+							if (parsed.source !== resolvedPriceSource(base)) {
 								respond(res, 409, { error: 'Price source changed. Reload and retry.' });
 								return;
 							}
-							({ config: next, report } = await prices.prices(before.config, parsed.source));
+							({ config: next, report } = await prices.prices(base, parsed.source));
+							if (staged) {
+								respond(res, 200, { ...before, report, preview: next });
+								return;
+							}
 							if ((await configPayload(history, holidays, true)).revision !== before.revision) {
 								respond(res, 409, { error: 'Configuration changed during sync. Reload and retry.' });
 								return;

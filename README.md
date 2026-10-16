@@ -31,19 +31,22 @@ GitHub contains the source code and release notes.
 - Groups the details by peak price, off-peak price and fixed price. Hides price rows that cost zero and shows no peak or off-peak token counts.
 - The session panel groups the four prices by peak, off-peak and fixed price, then lists each model's group sums. The turn panel lists the four prices of every group for each model.
 - Each price has an info button: hover it to see the calculation formula for that price. The popover closes when the pointer leaves.
-- Groups used models by provider. The list comes from DSH session history.
+- Groups used models by provider. The list comes from DSH session history and models declared in the configuration.
 - Supports separate prices for each full `provider/model` name.
 - Selects models.dev, openrouter.ai or api.deepinfra.com as the price source.
 - Initializes new model prices from the selected source's local cache. Uses zero if there is no matching price.
 - Downloads model prices only when you select **Sync prices**. The source controls, the Sync prices button and the sync report stay above the model rates table.
-- Syncs only configured models. Asks for confirmation before prices are overwritten.
+- Syncs only configured models. The sync result is staged in the draft and written to the configuration when you select **Save**.
 - Matches source prices by model ID. models.dev prefers manufacturer prices; OpenRouter and DeepInfra supply their own platform prices. Keeps existing prices if matching is unclear.
 - Keeps existing prices when the source cannot supply a supported rate.
 - Supports USD or CNY for each model. Converts all four rates when you change its currency.
 - Shows separate USD and CNY totals when a session or turn uses both currencies.
-- Saves valid changes automatically, in order. Keeps unfinished input and shows save errors.
-- Keeps basic settings and advanced settings collapsed. Advanced settings contain the exchange rate and session/turn visibility controls.
-- Puts cache-write prices and the automatic off-peak switch of every model in each model's advanced settings. The switch reveals that model's peak rule selector, and the info icon shows the windows of the selected rule.
+- Keeps edits in a page draft. The **Save** button at the end of the page writes the configuration. Leaving the page discards unsaved edits. A failed save shows the error and keeps the draft.
+- Shows two flat sections, **Model rates** and **General**, with all content visible. **General** contains the exchange rate and the session/turn visibility controls.
+- Expands **More rates** on each model row to show its cache-write price and the automatic off-peak switch. The switch reveals that model's peak rule selector, and the info icon shows the windows of the selected rule.
+- Adds a model by entering `provider/model` next to the **Model rates** title and selecting **Add model**. Declared models are saved with the configuration; models that history has not discovered can be removed.
+- Marks invalid rates and exchange rates with a red border and a message, and disables **Save** and **Sync prices**.
+- Reuses the DSH host controls (settings form, value field, switch, button and tag), so sizes, borders and colors match the host settings pages.
 - Applies half the peak rate in each off-peak window. Each model selects one peak rule:
 - **DeepSeek peak rule** (default): peak on Beijing weekday 09:00–12:00 and 14:00–18:00; off-peak on weekends, Chinese public holidays and all other windows.
 - **Alibaba Cloud peak rule**: off-peak 22:00–08:00 Beijing time; peak at all other times.
@@ -95,10 +98,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.3.1:
+Install the generated file in your DSH profile. For version 0.3.2:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.1.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.2.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.

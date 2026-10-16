@@ -31,17 +31,21 @@
 | Module | Responsibility / 职责 |
 | --- | --- |
 | `client/plugin.js` | One shared store, locale registration and slots / 创建唯一共享 store，注册语言和插槽 |
-| `client/config-store.js` | Requests, serial writes, conflict checks and local refresh / 请求、串行写入、冲突检查和本地状态刷新 |
+| `client/config-store.js` | Requests, save and sync, conflict checks and local refresh / 请求、保存与同步、冲突检查和本地状态刷新 |
 | `client/config-draft.js` | Draft conversion and validation / 草稿转换及校验 |
-| `client/config-controller.js` | Draft input, automatic saves, currency changes and sync / 输入草稿、自动保存、币种切换和同步流程 |
+| `client/config-controller.js` | Staged draft, validation, explicit save and sync preview / 暂存草稿、校验、显式保存和同步预览 |
 | `client/config-page.js` | Settings page composition / 配置页面装配 |
-| `client/form-controls.js`, `client/pricing-table.js` | Form controls and provider/model price rows with per-model peak rules / 表单控件、按提供方分组的价格表及每行的峰谷规则选择 |
+| `client/pricing-table.js` | Provider/model price rows with per-model peak rules / 按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |
 | `client/styles.css`, `client/styles.js` | Stylesheet and idempotent injection / 样式文件及防重复注入 |
 
 The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text` in the build command. The DSH module loader does not need to serve a separate stylesheet.
+
+The configuration page loads `@deepseek-ai/dsh-client-ui-primitives` with the module loader's `load()` in `src/client.js`. The shell provides that package as a static module, so the plugin shares the host instances and theme tokens of `SettingsForm`, `SettingsValueField`, `Switch`, `Button` and `Tag`. Never bundle it and never declare it as a dependency.
+
+配置页通过 `src/client.js` 的 `load()` 取用 `@deepseek-ai/dsh-client-ui-primitives`。该包由 shell 以静态模块提供，插件与宿主共享 `SettingsForm`、`SettingsValueField`、`Switch`、`Button`、`Tag` 的同一实例和主题变量。不要把它打包进本包，也不要声明为依赖。
 
 `src/client-store.js` and the named exports from `src/index.js` remain compatibility entry points. New code should import the module that owns the responsibility directly.
 
@@ -52,6 +56,8 @@ The build loads CSS as text and embeds it into `dist/client.js`. Keep `.css=text
 - Use exact local `provider/model` prices. Third-party price matching uses only the model ID.
 - Keep official token/retry folds and turn retention. Projection state version 4 preserves `event.time` and partitions tokens by route, Beijing date and one of seven clock windows. DSH replays old checkpoint data from the durable log.
 - Keep revision checks and the re-read after network initialization. Manual prices must win over delayed initialization.
+- Keep the staged sync contract: POST `pricing/sync` with a `config` body prices that staged config and returns `preview` plus `report` without writing; without `config` it keeps saving the synced configuration.
+- 保持暂存同步契约：POST `pricing/sync` 带 `config` 体时只对该草稿计价并返回 `preview` 与 `report`，不写盘；不带 `config` 时保持同步并写盘的旧行为。
 - Keep draft values as strings while editing. Validate and convert them before saving.
 - Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; every amount group and route also carries `periodMicros` and `tokensByPeriod` for the peak, off-peak, fixed and unknown windows. Legacy `micros` fields remain expressed in USD for compatibility. Rows and groups with zero money stay hidden in the client.
 - Preserve current error strings. Error localization is a separate behavior change.

@@ -278,6 +278,7 @@ test('configuration GET displays local prices while history discovery is still r
 	});
 	assert.equal(payload.config.pricing['p/a'].input, 3);
 	assert.equal(payload.historyPending, true);
+	assert.deepEqual(payload.discovered, ['p/a'], 'without a discovery list the models stand in');
 });
 
 test('one handler serializes concurrent writes and rejects the stale revision', async () => {
@@ -383,6 +384,77 @@ test('price sync accepts only the configured source and never fetches an arbitra
 	assert.deepEqual(calls, []);
 	assert.equal((await send('POST', { revision: before.revision, source: 'openrouter.ai' })).status, 200);
 	assert.deepEqual(calls, ['openrouter.ai']);
+});
+
+test('a staged price sync previews the draft and saves nothing', async () => {
+	let config = {
+		cnyPerUsd: 7,
+		priceSource: 'openrouter.ai',
+		showDockChip: true,
+		showTurnChip: true,
+		pricing: { 'p/a': rate(2) },
+	};
+	let saves = 0;
+	const priced = [];
+	const handler = host.createConfigHandler(
+		connection,
+		{
+			config: async () => config,
+			list: () => ['p/a'],
+			discovered: () => ['p/a'],
+			save: (value) => {
+				saves++;
+				config = value;
+			},
+		},
+		{
+			prices: async (value, source) => {
+				priced.push([source, value.pricing['p/a'].input]);
+				return { config: { ...value, pricing: { 'p/a': rate(9) } }, report: { updated: ['p/a'] } };
+			},
+		},
+	);
+	async function send(method, body) {
+		const req = Readable.from(body ? [Buffer.from(JSON.stringify(body))] : []);
+		Object.assign(req, {
+			method,
+			url: '/guojinpeng/dsh-cost-meter/pricing/sync',
+			headers: {
+				host: 'dsh.local:3000',
+				cookie: 'test-session',
+				origin: 'http://dsh.local:3000',
+				'content-type': 'application/json',
+			},
+		});
+		let status, payload;
+		await handler(req, {
+			writeHead: (value) => {
+				status = value;
+			},
+			end: (value) => {
+				payload = JSON.parse(value);
+			},
+		});
+		return { status, payload };
+	}
+	const { payload: before } = await send('GET');
+	assert.deepEqual(before.discovered, ['p/a']);
+	const staged = { ...config, pricing: { 'p/a': rate(5) } };
+	const preview = await send('POST', { revision: before.revision, source: 'openrouter.ai', config: staged });
+	assert.equal(preview.status, 200);
+	assert.equal(preview.payload.preview.pricing['p/a'].input, 9);
+	assert.deepEqual(preview.payload.report, { updated: ['p/a'] });
+	assert.equal(preview.payload.config.pricing['p/a'].input, 2, 'the stored config is untouched');
+	assert.equal(preview.payload.revision, before.revision);
+	assert.equal(saves, 0);
+	assert.deepEqual(priced, [['openrouter.ai', 5]], 'the draft is priced, not the stored config');
+	// A staged draft names its own source, so a different one is a conflict.
+	assert.equal(
+		(await send('POST', { revision: before.revision, source: 'models.dev', config: staged })).status,
+		409,
+	);
+	assert.deepEqual(priced, [['openrouter.ai', 5]]);
+	assert.equal(saves, 0);
 });
 
 test('unknown models stay unpriced and become priced after configuration', () => {

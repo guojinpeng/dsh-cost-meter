@@ -384,6 +384,27 @@ test('manual price written during initialization wins', async () => {
 	assert.equal(stored.pricing['A/a'].input, 7);
 });
 
+test('a declared route joins the model list and leaves with the saved config', async () => {
+	let stored = { ...config(), pricing: { 'p/a': zeroRate(), 'declared/model': zeroRate() } };
+	const history = createHistoryModels(
+		{
+			listSessions: async () => [{ header: { id: 's' } }],
+			readSession: async () => ({ events: [event('p', 'a')] }),
+		},
+		{
+			readConfig: () => stored,
+			writeConfig: (value) => (stored = value),
+			backupConfig: () => {},
+		},
+	);
+	await history.config();
+	assert.deepEqual(history.list(), ['declared/model', 'p/a']);
+	assert.deepEqual(history.discovered(), ['p/a']);
+	history.save({ ...stored, pricing: { 'p/a': zeroRate() } });
+	assert.deepEqual(history.list(), ['p/a']);
+	assert.deepEqual(Object.keys(stored.pricing), ['p/a']);
+});
+
 test('config loading status ends on both success and failure', async () => {
 	let complete;
 	const store = createConfigStore(

@@ -1,8 +1,10 @@
-import { parseRouteKey } from '../pricing.js';
+import { parseRouteKey, RATE_KEYS } from '../pricing.js';
 import { DEFAULT_PEAK_RULE, PEAK_RULES } from '../time-of-use.js';
+import { invalidPrice } from './config-draft.js';
 
-export function createPricingTable(react, numberInput, dialogs) {
+export function createPricingTable(react, ui, dialogs) {
 	const h = react.createElement;
+	const { Button, Switch, Tag } = ui;
 	const { useCostDialog, panel, IconInfoOutlineRegular } = dialogs;
 
 	/**
@@ -19,7 +21,7 @@ export function createPricingTable(react, numberInput, dialogs) {
 				'select',
 				{
 					key: 'select',
-					className: 'gdcc_input gdcc_ruleSelect',
+					className: 'gdcc_select gdcc_ruleSelect',
 					value: rule.id,
 					'aria-label': `${routeKey} ${t('configPeakRule')}`,
 					onChange: (event) => rowPatch(routeKey, 'peakRule', event.target.value),
@@ -53,37 +55,44 @@ export function createPricingTable(react, numberInput, dialogs) {
 		]);
 	}
 
-	function ModelRow({ row, rowPatch, currency, flush, t }) {
+	function ModelRow({ row, rowPatch, setCurrency, removeModel, removable, t }) {
 		const [open, setOpen] = react.useState(false);
 		const model = parseRouteKey(row.key).model;
-		const input = (field) =>
-			react.cloneElement(
-				numberInput(row[field], (value) => rowPatch(row.key, field, value), field),
-				{ 'aria-label': `${row.key} ${t(field)}`, min: 0, onBlur: flush },
-			);
+		const cell = (field) =>
+			h('input', {
+				key: field,
+				className: 'gdcc_cell',
+				type: 'text',
+				inputMode: 'decimal',
+				value: row[field],
+				'aria-label': `${row.key} ${t(field)}`,
+				...(invalidPrice(row[field]) ? { 'aria-invalid': 'true', 'aria-describedby': 'gdcc-price-error' } : {}),
+				onChange: (event) => rowPatch(row.key, field, event.target.value),
+			});
 		return h('div', { className: 'gdcc_modelItem' }, [
-			h('div', { className: 'gdcc_row', key: 'row' }, [
+			h('div', { key: 'row', className: 'gdcc_row' }, [
 				h('span', { key: 'model', className: 'gdcc_model', title: row.key }, model),
 				h(
 					'select',
 					{
 						key: 'currency',
-						className: 'gdcc_input gdcc_currency',
+						className: 'gdcc_select',
 						value: row.currency,
 						'aria-label': `${row.key} ${t('configModelCurrency')}`,
-						onChange: (event) => currency(row.key, event.target.value),
+						onChange: (event) => setCurrency(row.key, event.target.value),
 					},
 					['USD', 'CNY'].map((value) => h('option', { key: value, value }, value)),
 				),
-				...['input', 'output', 'cacheRead'].map(input),
+				...['input', 'output', 'cacheRead'].map(cell),
 				h(
-					'button',
+					Button,
 					{
-						key: 'advanced',
-						type: 'button',
-						className: 'gdcc_expand',
-						title: t('configAdvanced'),
-						'aria-label': `${row.key} ${t('configAdvanced')}`,
+						key: 'more',
+						variant: 'ghost',
+						size: 'sm',
+						className: 'gdcc_rowToggle',
+						title: `${row.key} ${t('configRowMore')}`,
+						'aria-label': `${row.key} ${t('configRowMore')}`,
 						'aria-expanded': open,
 						onClick: () => setOpen(!open),
 					},
@@ -91,20 +100,18 @@ export function createPricingTable(react, numberInput, dialogs) {
 				),
 			]),
 			open
-				? h('div', { key: 'advanced', className: 'gdcc_modelOptions' }, [
+				? h('div', { key: 'more', className: 'gdcc_modelOptions' }, [
 						h('label', { key: 'cacheWrite', className: 'gdcc_option' }, [
 							h('span', { key: 'label' }, `${t('cacheWrite')} (${row.currency} / 1M tokens)`),
-							input('cacheWrite'),
+							cell('cacheWrite'),
 						]),
-						h('label', { key: 'peak', className: 'gdcc_switch' }, [
+						h('span', { key: 'peak', className: 'gdcc_option' }, [
 							h('span', { key: 'label' }, t('configAutoOffPeak')),
-							h('input', {
-								key: 'input',
-								type: 'checkbox',
-								role: 'switch',
+							h(Switch, {
+								key: 'switch',
 								checked: row.autoOffPeak === true,
-								'aria-label': `${row.key} ${t('configAutoOffPeak')}`,
-								onChange: (event) => rowPatch(row.key, 'autoOffPeak', event.target.checked),
+								label: `${row.key} ${t('configAutoOffPeak')}`,
+								onChange: (value) => rowPatch(row.key, 'autoOffPeak', value),
 							}),
 						]),
 						row.autoOffPeak === true
@@ -116,11 +123,21 @@ export function createPricingTable(react, numberInput, dialogs) {
 									t,
 								})
 							: null,
+						row.source === 'manual' ? h(Tag, { key: 'manual', tone: 'neutral' }, t('configManualPrice')) : null,
+						removable
+							? h(
+									Button,
+									{ key: 'remove', variant: 'ghost', size: 'sm', className: 'gdcc_remove', onClick: () => removeModel(row.key) },
+									t('configRemoveModel'),
+								)
+							: null,
 					])
 				: null,
 		]);
 	}
-	return function PricingTable({ rows, rowPatch, currency, flush, t }) {
+
+	return function PricingTable({ rows, rowPatch, setCurrency, removeModel, discovered, t }) {
+		const badPrice = rows.some((row) => RATE_KEYS.some((field) => invalidPrice(row[field])));
 		const groups = new Map();
 		for (const row of rows) {
 			const { provider } = parseRouteKey(row.key);
@@ -132,8 +149,12 @@ export function createPricingTable(react, numberInput, dialogs) {
 				? h(
 						'div',
 						{ key: 'head', className: 'gdcc_row gdcc_tableHead' },
-						['modelName', 'configModelCurrency', 'input', 'output', 'cacheRead', ''].map((key) =>
-							h('span', { key, className: 'gdcc_rowHead' }, key ? t(key) : ''),
+						['modelName', 'configModelCurrency', 'input', 'output', 'cacheRead', ''].map((key, index) =>
+							h(
+								'span',
+								{ key: key || 'more', className: index > 1 && index < 5 ? 'gdcc_rowHead gdcc_num' : 'gdcc_rowHead' },
+								key ? t(key) : '',
+							),
 						),
 					)
 				: null,
@@ -143,9 +164,22 @@ export function createPricingTable(react, numberInput, dialogs) {
 					{ key: `provider:${provider}`, className: 'gdcc_provider', role: 'heading', 'aria-level': 3 },
 					provider,
 				),
-				...entries.map((row) => h(ModelRow, { key: row.key, row, rowPatch, currency, flush, t })),
+				...entries.map((row) =>
+					h(ModelRow, {
+						key: row.key,
+						row,
+						rowPatch,
+						setCurrency,
+						removeModel,
+						removable: !discovered.includes(row.key),
+						t,
+					}),
+				),
 			]),
 			rows.length ? null : h('div', { key: 'empty', className: 'gdcc_hint' }, t('configEmpty')),
+			badPrice
+				? h('p', { key: 'error', id: 'gdcc-price-error', className: 'gdcc_invalid' }, t('configInvalidPrice'))
+				: null,
 		]);
 	};
 }

@@ -9,12 +9,12 @@ import { createUseConfigController } from './config-controller.js';
 import { createConfigPage } from './config-page.js';
 
 // React comes from the DSH module loader so every component uses the host runtime.
-export function createClientPlugin(react, reactDom) {
+export function createClientPlugin(react, reactDom, ui) {
 	const store = createConfigStore();
 	const useCostView = createUseCostView(react, store);
 	const dialogs = createCostDialog(react, reactDom);
 	const { CostDockChip, CostTurnAction } = createCostChips(react, useCostView, dialogs);
-	const CostConfigCard = createConfigPage(react, createUseConfigController(react, store), dialogs);
+	const CostConfigCard = createConfigPage(react, ui, createUseConfigController(react, store), dialogs);
 	const NS = LOCALE_NAMESPACE;
 	const ENTRY_ID = PACKAGE_ID;
 	installStyles();

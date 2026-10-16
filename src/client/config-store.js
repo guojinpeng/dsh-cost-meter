@@ -141,18 +141,24 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 				}
 			});
 		},
-		sync: (source) =>
+		/**
+		 * Sync prices. With a staged config the server only previews the result and
+		 * writes nothing; without one it keeps committing the synced prices.
+		 */
+		sync: (source, config) =>
 			enqueue(async () => {
-				const selected = resolvedPriceSource(snapshot?.config ?? {});
-				if (source !== undefined && source !== selected)
+				const staged = config !== undefined;
+				const selected = resolvedPriceSource(config ?? snapshot?.config ?? {});
+				if (!staged && source !== undefined && source !== selected)
 					throw new Error('Price source changed. Reload and retry.');
-				sequence++;
+				if (!staged) sequence++;
 				const value = await request('pricing/sync', {
 					source: selected,
 					revision: snapshot?.revision,
+					...(staged ? { config: inputConfig(config) } : {}),
 				});
-				sequence++;
-				return publish(value);
+				if (!staged) sequence++;
+				return staged ? value : publish(value);
 			}),
 	};
 	return store;
