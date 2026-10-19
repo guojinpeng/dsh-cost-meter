@@ -151,6 +151,7 @@ export function createConfigPage(react, ui, useConfigController, dialogs) {
 						...[
 							['showDockChip', t('configShowDockChip')],
 							['showTurnChip', t('configShowTurnChip')],
+							['showSidebarCost', t('configShowSidebarCost')],
 						].map(([key, label]) =>
 							h('div', { key, className: 'gdcc_switchRow' }, [
 								h('span', { key: 'label', className: 'gdcc_switchLabel' }, label),

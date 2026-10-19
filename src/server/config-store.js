@@ -26,7 +26,7 @@ const CONFIG_FILE_NAME = 'config.json';
  * Mirrors `@deepseek-ai/dsh-home-paths` `resolveDshHome` without depending on it,
  * so installing this plugin never adds an npm dependency.
  */
-function resolveDshHome(env = process.env) {
+export function resolveDshHome(env = process.env) {
 	const configured = typeof env.DSH_HOME === 'string' ? env.DSH_HOME.trim() : '';
 	if (configured !== '') return configured;
 	return join(homedir(), '.dsh');
@@ -56,6 +56,7 @@ function normalizeConfig(raw) {
 		cnyPerUsd: Number.isFinite(cnyPerUsd) && cnyPerUsd > 0 ? cnyPerUsd : 7.2,
 		showDockChip: source.showDockChip !== false,
 		showTurnChip: source.showTurnChip !== false,
+		showSidebarCost: source.showSidebarCost !== false,
 		pricing,
 	};
 }
@@ -89,6 +90,19 @@ export function readConfig(force = false) {
 		const config = normalizeConfig({});
 		configCache = { mtimeMs: -1, size: -1, config };
 		return config;
+	}
+}
+
+/**
+ * Cheap identity of the config file, used to invalidate derived caches such as
+ * the overview cache when prices change.
+ */
+export function configStamp() {
+	try {
+		const stats = statSync(CONFIG_PATH);
+		return String(stats.mtimeMs) + ':' + String(stats.size);
+	} catch {
+		return '';
 	}
 }
 

@@ -29,7 +29,7 @@ export const allModels = (models, config) => [...new Set([...models, ...configur
 
 export function createHistoryModels(
 	sessionQuery,
-	{ readConfig, writeConfig, backupConfig, initializePrices, onError = () => {} },
+	{ readConfig, writeConfig, backupConfig, initializePrices, sessionLogs, onError = () => {} },
 ) {
 	const models = new Set(),
 		years = new Set();
@@ -98,20 +98,34 @@ export function createHistoryModels(
 				if (!ready) {
 					if (!scanning)
 						scanning = (async () => {
-							const sessions = await sessionQuery.listSessions();
+							// One unreadable session must not block the configuration page: the
+							// host refuses logs written by a newer harness, and older logs may
+							// be corrupt. The scan skips those sessions.
+							const sessions = await sessionQuery.listSessions().catch((error) => {
+								onError(error);
+								return [];
+							});
 							const discovered = new Set();
-							// Bound cold reads and commit the model set only after a complete scan.
-							for (let offset = 0; offset < sessions.length; offset += 4) {
-								const logs = await Promise.all(
-									sessions.slice(offset, offset + 4).map((row) => sessionQuery.readSession(row.header.id)),
-								);
-								for (const log of logs)
-									for (const event of log.events) {
-										if (Number.isFinite(event.time))
-											years.add(new Date(event.time + 8 * 3600000).getUTCFullYear());
-										const route = routeFromEvent(event);
-										if (route) discovered.add(route);
-									}
+							const definition = {
+								init: () => null,
+								apply: (_state, event) => {
+									if (Number.isFinite(event?.time))
+										years.add(new Date(event.time + 8 * 3600000).getUTCFullYear());
+									const route = routeFromEvent(event);
+									if (route) discovered.add(route);
+									return null;
+								},
+							};
+							// Decode the log files first: the host replay is much slower. A
+							// session without a readable log file still goes through the host.
+							const locations = sessionLogs ? sessionLogs.locate() : new Map();
+							for (const row of sessions) {
+								const id = row?.header?.id;
+								if (typeof id !== 'string') continue;
+								const location = locations.get(id);
+								if (location !== undefined && sessionLogs.fold(location, definition) !== null) continue;
+								const log = await sessionQuery.readSession(id).catch(() => null);
+								for (const event of log?.events ?? []) definition.apply(null, event);
 							}
 							for (const route of discovered) models.add(route);
 							ready = true;

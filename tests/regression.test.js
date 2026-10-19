@@ -26,10 +26,21 @@ const configStore = await import('../src/server/config-store.js');
 const { HostConnectionService } = await import(
 	pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection'))
 );
+// The host fence is used as is; requestRejection delegates to admit() in recent
+// host versions, so the stand-in carries the state that admit() reads.
 const connection = {
 	trustedHosts: ['dsh.local:3000'],
-	browserAuth: { isAuthenticated: (req) => req.headers.cookie === 'test-session' },
+	browserAuth: {
+		isAuthenticated: (req) => req.headers.cookie === 'test-session',
+		authenticateApi: () => undefined,
+	},
+	owner: { get: () => undefined },
+	disposed: false,
+	browserPeer: { id: 'test-peer' },
+	peers: new Map(),
 	requestRejection: HostConnectionService.prototype.requestRejection,
+	admit: HostConnectionService.prototype.admit,
+	isTrusted: HostConnectionService.prototype.isTrusted,
 };
 after(() => {
 	if (previousHome === undefined) delete process.env.DSH_HOME;
@@ -62,6 +73,7 @@ test('existing config is read without rewriting and appended model settings surv
 		cnyPerUsd: 7,
 		showDockChip: true,
 		showTurnChip: true,
+		showSidebarCost: true,
 		pricing: { [key]: rate(2) },
 	};
 	configStore.writeConfig(original);

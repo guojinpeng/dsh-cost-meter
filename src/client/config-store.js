@@ -46,12 +46,21 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 		operations = next;
 		return next;
 	};
-	const inputConfig = ({ currency, priceSource, cnyPerUsd, showDockChip, showTurnChip, pricing }) => ({
+	const inputConfig = ({
 		currency,
 		priceSource,
 		cnyPerUsd,
 		showDockChip,
 		showTurnChip,
+		showSidebarCost,
+		pricing,
+	}) => ({
+		currency,
+		priceSource,
+		cnyPerUsd,
+		showDockChip,
+		showTurnChip,
+		showSidebarCost,
 		pricing,
 	});
 	const merge = (config, changes) => ({

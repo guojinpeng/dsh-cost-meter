@@ -158,6 +158,7 @@ export const configInputSchema = z
 		cnyPerUsd: z.number().positive(),
 		showDockChip: z.boolean(),
 		showTurnChip: z.boolean(),
+		showSidebarCost: z.boolean().optional(),
 		pricing: z.record(z.string(), rateSchema),
 	})
 	.strict();

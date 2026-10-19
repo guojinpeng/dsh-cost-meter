@@ -39,6 +39,7 @@ export function buildDraft(payload) {
 		cnyPerUsd: text(config.cnyPerUsd ?? 7.2),
 		showDockChip: config.showDockChip !== false,
 		showTurnChip: config.showTurnChip !== false,
+		showSidebarCost: config.showSidebarCost !== false,
 		rows: (payload?.models ?? []).map((key) => {
 			const rate = pricing[key] ?? zeroRate();
 			return {
@@ -77,6 +78,7 @@ export function configOf(draft) {
 		cnyPerUsd,
 		showDockChip: draft.showDockChip,
 		showTurnChip: draft.showTurnChip,
+		showSidebarCost: draft.showSidebarCost,
 		pricing,
 	};
 }

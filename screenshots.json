@@ -1,7 +1,7 @@
 {
   "screenshots": [
     "docs/images/overview.png",
-    "docs/images/turn-cost.png",
-    "docs/images/session-cost.png"
+    "docs/images/cost-overview.png",
+    "docs/images/session-cost-detail.png"
   ]
 }

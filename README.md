@@ -29,6 +29,7 @@ GitHub contains the source code and release notes.
 ## Features
 
 - Shows session and completed-turn cost estimates. The session chip sits in the composer, and the turn chip follows the official turn usage pill, with the clock last. Both use the price tag icon.
+- Adds a **Cost statistics** entry to the sidebar **Plugins** area. Select it to open the cost overview page.
 - Shows a short initialization message when model prices are not ready.
 - Groups the details by peak price, off-peak price and fixed price. Hides price rows that cost zero and shows no peak or off-peak token counts.
 - The session panel groups the four prices by peak, off-peak and fixed price, then lists each model's group sums. The turn panel lists the four prices of every group for each model.
@@ -44,7 +45,10 @@ GitHub contains the source code and release notes.
 - Supports USD or CNY for each model. Converts all four rates when you change its currency.
 - Shows separate USD and CNY totals when a session or turn uses both currencies.
 - Keeps edits in a page draft. The **Save** button at the end of the page writes the configuration. Leaving the page discards unsaved edits. A failed save shows the error and keeps the draft.
-- Shows two flat sections, **Model rates** and **General**, with all content visible. **General** contains the exchange rate and the session/turn visibility controls.
+- Shows two flat sections, **Model rates** and **General**, with all content visible. **General** contains the exchange rate, the session/turn visibility controls and the **Show cost statistics in the sidebar** switch (on by default). Turn the switch off to remove the sidebar entry; the overview page keeps its data.
+- Shows the cost overview page for today, 7, 30, 90 days, all history or a custom start and end date. It shows four summary figures, a stacked daily cost or token trend, the cost and token mix, cost by model, the top sessions and the current rate, totals and generation time. Amounts use the configured currency and `cnyPerUsd` rate.
+- Caps the cost trend at 20 bars. Above 20 days it merges neighbouring dates and shows the merged span. The **Plugin settings** button opens the plugin page. Preset ranges cache their result for 5 minutes; **Refresh** or a price change recomputes it. Custom date ranges are not cached.
+- Follows the DSH light or dark theme and the DSH Chinese or English language.
 - Expands **More rates** on each model row to show its cache-write price and the automatic off-peak switch. The switch reveals that model's peak rule selector, and the info icon shows the windows of the selected rule.
 - Adds a model by entering `provider/model` next to the **Model rates** title and selecting **Add model**. Declared models are saved with the configuration; models that history has not discovered can be removed.
 - Marks invalid rates and exchange rates with a red border and a message, and disables **Save** and **Sync prices**.

@@ -2,10 +2,13 @@ import { copyFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHistoryModels } from './history.js';
 import { createPriceService } from './server/price-service.js';
-import { PLUGIN_ID, HTTP_BASE } from './identity.js';
+import { PLUGIN_ID, HTTP_BASE, PROJECTION_KEY } from './identity.js';
 import { CONFIG_PATH, readConfig, writeConfig, seedConfigFile } from './server/config-store.js';
 import { createCostUsageProjection } from './server/projection.js';
 import { createConfigHandler } from './server/config-handler.js';
+import { createOverviewCache } from './server/overview-cache.js';
+import { createOverviewHandler } from './server/overview.js';
+import { createSessionLogs } from './server/session-log.js';
 import { createHolidayStore } from './server/holiday-store.js';
 
 export { readConfig } from './server/config-store.js';
@@ -31,9 +34,21 @@ export function apply(ctx) {
 	// Headless profiles still get the projection; HTTP requires browser auth.
 	ctx.inject(['sessionQuery'], (queryCtx) => {
 		const prices = createPriceService(join(dirname(CONFIG_PATH), 'data'));
+		const overviewCache = createOverviewCache(join(dirname(CONFIG_PATH), 'data', 'cache'));
+		// Session logs are read directly, which is much faster than replaying
+		// every event through the host query service.
+		let warnedLog = false;
+		const sessionLogs = createSessionLogs({
+			onError: (error) => {
+				if (warnedLog) return;
+				warnedLog = true;
+				ctx.logger?.warn('Could not read a session log', error);
+			},
+		});
 		const history = createHistoryModels(queryCtx.sessionQuery, {
 			readConfig,
 			writeConfig,
+			sessionLogs,
 			initializePrices: prices.initialize,
 			onError: (error) => ctx.logger?.warn('Could not initialize model prices', error),
 			backupConfig: () => {
@@ -53,6 +68,33 @@ export function apply(ctx) {
 					`guojinpeng/dsh-cost-meter: ${path}`,
 				);
 			}
+			// The overview reads live sessions from the host projection and folds
+			// persisted ones once per session.
+			const liveStateOf = (id) => {
+				try {
+					const session = queryCtx.sessions?.get?.(id);
+					return session ? ctx.sessionProjections.stateOf(session, PROJECTION_KEY) : undefined;
+				} catch {
+					return undefined;
+				}
+			};
+			const overview = createOverviewHandler(
+				webCtx.connection,
+				queryCtx.sessionQuery,
+				holidays,
+				liveStateOf,
+				sessionLogs,
+				overviewCache,
+			);
+			webCtx.effect(
+				() =>
+					webCtx.webServer.register({
+						kind: 'exact',
+						path: `${HTTP_BASE}/overview`,
+						handler: overview,
+					}),
+				'guojinpeng/dsh-cost-meter: overview',
+			);
 		});
 	});
 }

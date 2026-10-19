@@ -55,7 +55,7 @@ test('history migration preserves old prices; missing and newly observed routes 
 	assert.deepEqual(stored.pricing['p/c'], newRate('p/c'));
 });
 
-test('failed history scan does not prune config and can be retried', async () => {
+test('an unreadable session does not prune config and does not block discovery', async () => {
 	let stored = { ...config(), pricing: { 'p/a': zeroRate() } },
 		fail = true,
 		writes = 0;
@@ -76,10 +76,12 @@ test('failed history scan does not prune config and can be retried', async () =>
 			backupConfig: () => {},
 		},
 	);
-	await assert.rejects(history.config());
-	assert.equal(writes, 0);
+	const reconciled = await history.config();
+	assert.equal(writes, 0, 'the skipped session leaves the stored config unchanged');
+	assert.deepEqual(Object.keys(reconciled.pricing), ['p/a'], 'the configured route survives the failed read');
+	assert.equal(history.ready(), true);
 	fail = false;
-	assert.deepEqual((await history.config()).pricing, stored.pricing);
+	assert.deepEqual((await history.config()).pricing, stored.pricing, 'the second read does not prune the config');
 });
 
 test('sync updates only configured exact routes and preserves absent cache rates', () => {
