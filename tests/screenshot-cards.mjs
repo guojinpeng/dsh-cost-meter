@@ -134,7 +134,7 @@ try {
 .xD_KDq_endInfo{min-width:0;display:inline-flex;align-items:center;gap:8px;margin-left:8px}
 .hostRow button{font:inherit;color:inherit;background:0 0;border:0;padding:0;cursor:pointer}
 </style></head><body><div id="root"></div>
-<div class="hostRow" id="hostRow"><span class="xD_KDq_actions" id="hostActions"><button type="button" id="copy">copy</button><span class="gdcc_turnRoot" id="hostChip"><button type="button" class="gdcc_turnTrigger" id="hostTrigger">¥0.43</button></span><button type="button" id="branch">branch</button><span class="xD_KDq_endInfo" id="hostEnd"><button type="button" id="usage">1.5M tok</button><span class="xD_KDq_timeEnd" id="hostTime">16:06</span></span></span></div>
+<div class="hostRow" id="hostRow"><span class="xD_KDq_actions" id="hostActions"><button type="button" id="copy">copy</button><div data-slot="conversation.chat.assistant-actions" style="display:contents"><span class="gdcc_turnRoot" id="hostChip"><button type="button" class="gdcc_turnTrigger" id="hostTrigger">¥0.43</button></span></div><button type="button" id="branch">branch</button><span class="xD_KDq_endInfo" id="hostEnd"><button type="button" id="usage">1.5M tok</button><span class="xD_KDq_timeEnd" id="hostTime">16:06</span></span></span></div>
 </body></html>`,
 	);
 	await page.addScriptTag({ content: bundle.outputFiles[0].text });
@@ -151,8 +151,10 @@ try {
 		'both chips share the pending config request',
 	);
 	await page.evaluate(() => window.completeConfigLoad());
-	// The chip sits between the official usage pill and the clock: the footer
-	// span becomes a pass-through, then flex order places the three items.
+	// The chip sits between the official usage pill and the clock: the slot
+	// anchor and the footer span both become pass-throughs, then flex order
+	// places the three items. The anchor div mirrors the host slot wrapper, so
+	// a direct-child selector on the actions row fails here as it does there.
 	const hostBox = async (selector) => await page.locator(selector).boundingBox();
 	const chipBox = await hostBox('#hostChip');
 	const usageBox = await hostBox('#usage');

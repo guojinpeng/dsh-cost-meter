@@ -56,17 +56,19 @@
 }
 /* The host footer wraps the official usage pill and the clock in one inline
    span. A pass-through span makes them flex items of the footer, so the order
-   above can place the chip between them: usage 0, chip 2, clock 3. The rules
-   match host classes by suffix; if the host renames them the chip only falls
-   back to the end of the row, so no behaviour depends on them. */
-[class*='_actions']:has(> .gdcc_turnRoot) > [class*='_endInfo'] {
+   above can place the chip between them: usage 0, chip 2, clock 3. The slot
+   renderer wraps our trigger in its own pass-through anchor, so the trigger is
+   a grandchild here, not a child. The rules match host classes by suffix; if
+   the host renames them the chip only falls back to the end of the row, so no
+   behaviour depends on them. */
+[class*='_actions']:has(.gdcc_turnRoot) > [class*='_endInfo'] {
 	display: contents;
 }
-[class*='_actions']:has(> .gdcc_turnRoot) > [class*='_endInfo'] > :first-child {
+[class*='_actions']:has(.gdcc_turnRoot) > [class*='_endInfo'] > :first-child {
 	/* The pass-through span loses the margin that spaced the footer. */
 	margin-left: 8px;
 }
-[class*='_actions']:has(> .gdcc_turnRoot) > [class*='_endInfo'] > [class*='_timeEnd'] {
+[class*='_actions']:has(.gdcc_turnRoot) > [class*='_endInfo'] > [class*='_timeEnd'] {
 	order: 3;
 }
 .gdcc_turnTrigger {

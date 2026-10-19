@@ -102,7 +102,7 @@ node tests/install-smoke.mjs
 
 Tests use the installed DSH runtime. `DSH_RUNTIME_ROOT` can select a different runtime. The install smoke test uses an isolated `DSH_HOME` and tests the package version from `package.json`. It does not change the user's profiles.
 
-Set `PLAYWRIGHT_MODULE` to an installed Playwright module to include desktop configuration checks. `node tests/screenshot-cards.mjs` creates desktop session and turn screenshots from the actual components; `node tests/screenshot-overview.mjs` draws the overview image with both panels and both chips. Both scripts require Playwright and the same `REACT_MODULE_ROOT` and `PLAYWRIGHT_MODULE` variables. Set `SCREENSHOT_DIR` to keep verification images outside `docs/images`.
+Set `PLAYWRIGHT_MODULE` to an installed Playwright module to include desktop configuration checks. `node tests/screenshot-cards.mjs` creates desktop session and turn screenshots from the actual components; `node tests/screenshot-overview.mjs` draws the overview image with both panels, both chips and one price formula popover. Both scripts require Playwright and the same `REACT_MODULE_ROOT` and `PLAYWRIGHT_MODULE` variables. Set `SCREENSHOT_DIR` to keep verification images outside `docs/images`.
 
 The repository root holds `screenshots.json`. It lists the overview, turn and session images as relative paths, so the plugin registry picks them up for the market card and the detail dialog. Keep the paths relative to the repository root and use PNG files.
 Set `SCREENSHOT_LOCALE=en` to check the English cards. If React is not exposed by the global DSH package, set `REACT_MODULE_ROOT` to a directory that can resolve React and ReactDOM.
