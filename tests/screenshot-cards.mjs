@@ -107,6 +107,7 @@ createRoot(document.getElementById('root')).render(React.createElement('div', { 
  React.createElement(window.costCards.CostDockChip, { ...props, key: 'session' }),
  React.createElement(window.costCards.CostTurnChip, { ...props, key: 'turn', turn: 1 }),
 ]));
+
 `;
 const bundle = await build({
 	stdin: { contents: source, resolveDir: resolve('src'), loader: 'js' },
@@ -127,11 +128,18 @@ try {
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
 	await page.setContent(
-		`<html><head><style>:root{--dsw-alias-label-primary:#202124;--dsw-alias-label-secondary:#555;--dsw-alias-label-tertiary:#80868b;--dsw-specific-menu:#fff;--dsw-alias-border-l1:#e2e3e5;--dsw-alias-border-l2:#eceef0;--dsw-radius-lg:8px;--dsw-radius-sm:4px;--dsw-elevation-prominent:0 2px 12px #0002}body{margin:0;font-family:Arial,sans-serif;background:#fff}</style></head><body><div id="root"></div></body></html>`,
+		`<html><head><style>:root{--dsw-alias-label-primary:#202124;--dsw-alias-label-secondary:#555;--dsw-alias-label-tertiary:#80868b;--dsw-specific-menu:#fff;--dsw-alias-border-l1:#e2e3e5;--dsw-alias-border-l2:#eceef0;--dsw-radius-lg:8px;--dsw-radius-sm:4px;--dsw-elevation-prominent:0 2px 12px #0002}body{margin:0;font-family:Arial,sans-serif;background:#fff}
+.hostRow{position:fixed;left:32px;top:32px;display:flex;align-items:center;gap:8px;font:13px Arial;color:#80868b}
+.xD_KDq_actions{display:flex;align-items:center;gap:8px;height:28px}
+.xD_KDq_endInfo{min-width:0;display:inline-flex;align-items:center;gap:8px;margin-left:8px}
+.hostRow button{font:inherit;color:inherit;background:0 0;border:0;padding:0;cursor:pointer}
+</style></head><body><div id="root"></div>
+<div class="hostRow" id="hostRow"><span class="xD_KDq_actions" id="hostActions"><button type="button" id="copy">copy</button><span class="gdcc_turnRoot" id="hostChip"><button type="button" class="gdcc_turnTrigger" id="hostTrigger">¥0.43</button></span><button type="button" id="branch">branch</button><span class="xD_KDq_endInfo" id="hostEnd"><button type="button" id="usage">1.5M tok</button><span class="xD_KDq_timeEnd" id="hostTime">16:06</span></span></span></div>
+</body></html>`,
 	);
 	await page.addScriptTag({ content: bundle.outputFiles[0].text });
-	await page.locator('.gdcc_dockPill').waitFor();
-	await page.locator('.gdcc_turnTrigger').waitFor();
+	await page.locator('#root .gdcc_dockPill').waitFor();
+	await page.locator('#root .gdcc_turnTrigger').waitFor();
 	assert.equal(
 		await page.locator('.gdcc_initializing').count(),
 		0,
@@ -143,9 +151,24 @@ try {
 		'both chips share the pending config request',
 	);
 	await page.evaluate(() => window.completeConfigLoad());
+	// The chip sits between the official usage pill and the clock: the footer
+	// span becomes a pass-through, then flex order places the three items.
+	const hostBox = async (selector) => await page.locator(selector).boundingBox();
+	const chipBox = await hostBox('#hostChip');
+	const usageBox = await hostBox('#usage');
+	const branchBox = await hostBox('#branch');
+	const timeBox = await hostBox('#hostTime');
+	assert.equal(
+		await page.locator('#hostEnd').evaluate((element) => getComputedStyle(element).display),
+		'contents',
+		'the host footer span becomes a pass-through',
+	);
+	assert.ok(branchBox.x < usageBox.x, 'the branch button keeps the host order');
+	assert.ok(usageBox.x < chipBox.x, 'the chip follows the official usage pill');
+	assert.ok(chipBox.x + chipBox.width <= timeBox.x, 'the clock stays last');
 	const screenshotDir = process.env.SCREENSHOT_DIR ?? 'docs/images';
 	mkdirSync(screenshotDir, { recursive: true });
-	await page.locator('.gdcc_dockPill').click();
+	await page.locator('#root .gdcc_dockPill').click();
 	await page
 		.locator('.gdcc_panel')
 		.getByText(language === 'en' ? 'Session cost' : '会话费用', { exact: true })
@@ -176,7 +199,7 @@ try {
 	await hint.waitFor({ state: 'detached' });
 	await page.locator('.gdcc_panel').screenshot({ path: join(screenshotDir, 'session-cost.png') });
 	await page.keyboard.press('Escape');
-	await page.locator('.gdcc_turnTrigger').click();
+	await page.locator('#root .gdcc_turnTrigger').click();
 	await page
 		.locator('.gdcc_panel')
 		.getByText(language === 'en' ? 'Turn cost' : '本轮费用', { exact: true })

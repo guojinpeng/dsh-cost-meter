@@ -6,6 +6,8 @@ This plugin shows estimated session and turn costs in DSH.
 Use DSH 0.2.0-rc.2 or later.
 Tests use DSH 0.2.0-rc.2.
 
+![Session and turn cost overview](docs/images/overview.png)
+
 ## Install
 
 1. Install the npm package:
@@ -26,7 +28,7 @@ GitHub contains the source code and release notes.
 
 ## Features
 
-- Shows session and completed-turn cost estimates.
+- Shows session and completed-turn cost estimates. The session chip sits in the composer, and the turn chip follows the official turn usage pill, with the clock last. Both use the price tag icon.
 - Shows a short initialization message when model prices are not ready.
 - Groups the details by peak price, off-peak price and fixed price. Hides price rows that cost zero and shows no peak or off-peak token counts.
 - The session panel groups the four prices by peak, off-peak and fixed price, then lists each model's group sums. The turn panel lists the four prices of every group for each model.

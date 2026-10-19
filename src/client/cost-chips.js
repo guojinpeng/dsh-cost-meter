@@ -1,3 +1,4 @@
+import { createCostIcon } from './icons.js';
 import { formatMoney, formatChipMoney, formatExactTokens, formatAmounts, formatAmountPeriod } from './format.js';
 
 /** Detail rows of one priced period, in display order. */
@@ -19,7 +20,8 @@ const GROUPS = [
 
 export function createCostChips(react, useCostView, dialogs) {
 	const h = react.createElement;
-	const { useCostDialog, panel, details, Hint, IconGaugeOutlineRegular } = dialogs;
+	const { useCostDialog, panel, details, Hint } = dialogs;
+	const CostIcon = createCostIcon(react);
 
 	function InitializingChip({ t, turn }) {
 		return h(
@@ -31,7 +33,7 @@ export function createCostChips(react, useCostView, dialogs) {
 					className: (turn ? 'gdcc_turnTrigger' : 'gdcc_dockPill') + ' gdcc_initializing',
 					title: t('initializing'),
 				},
-				[h(IconGaugeOutlineRegular, { key: 'icon' }), h('span', { key: 'label' }, t('initializing'))],
+				[h(CostIcon, { key: 'icon' }), h('span', { key: 'label' }, t('initializing'))],
 			),
 		);
 	}
@@ -220,7 +222,7 @@ export function createCostChips(react, useCostView, dialogs) {
 					onClick: () => dialog.setOpen(!dialog.open),
 				},
 				[
-					h(IconGaugeOutlineRegular, { key: 'i' }),
+					h(CostIcon, { key: 'i' }),
 					h('span', { className: 'gdcc_dockLabel', key: 'l' }, label),
 				],
 			),
@@ -232,7 +234,7 @@ export function createCostChips(react, useCostView, dialogs) {
 						value: view.amounts
 							? formatAmounts(view.amounts)
 							: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
-						icon: IconGaugeOutlineRegular,
+						icon: CostIcon,
 						children,
 					})
 				: null,
@@ -297,7 +299,7 @@ export function createCostChips(react, useCostView, dialogs) {
 					onClick: () => dialog.setOpen(!dialog.open),
 				},
 				[
-					h(IconGaugeOutlineRegular, { key: 'i' }),
+					h(CostIcon, { key: 'i' }),
 					h('span', { className: 'gdcc_turnLabel', key: 'l' }, t('turnCost', { amount: label })),
 				],
 			),
@@ -309,7 +311,7 @@ export function createCostChips(react, useCostView, dialogs) {
 						value: entry.amounts
 							? formatAmounts(entry.amounts)
 							: formatMoney(entry.micros, view.currency, view.cnyPerUsd),
-						icon: IconGaugeOutlineRegular,
+						icon: CostIcon,
 						children,
 					})
 				: null,

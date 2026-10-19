@@ -3,11 +3,12 @@ export function createCostDialog(react, reactDom) {
 	// This plugin ships no dependency on a DSH Client package. A separate
 	// npm plugin may not runtime-import one: its bundle is built outside the
 	// Harness module table, so there is no supplier for such a request. The
-	// two hooks and the icon below are therefore copied from
+	// two hooks and the info glyph below are therefore copied from
 	// `@deepseek-ai/dsh-client-ui-primitives` (v0.2.1-alpha.2,
 	// src/useAnchoredPosition.ts, src/useDismissOnOutsidePointer.ts, and
 	// src/icons/index.tsx). Inlined copies stay local to this plugin; an
-	// upstream primitive change does not reach them.
+	// upstream primitive change does not reach them. The cost glyph lives in
+	// icons.js because both chips and both panels use it.
 
 	/** Viewport inset an overlay keeps below the desktop frame's top strip. */
 	function overlayTopMargin(min) {
@@ -88,36 +89,6 @@ export function createCostDialog(react, reactDom) {
 				document.removeEventListener(`pointerdown`, closeOutside);
 			};
 		}, [root, open, setOpen, portal]);
-	}
-
-	/**
-	 * The official gauge glyph (IconGaugeOutline at the regular 1px weight).
-	 * @returns the svg element.
-	 */
-	function IconGaugeOutlineRegular(props) {
-		const { size = 16, className } = props ?? {};
-		return h(
-			`svg`,
-			{
-				width: size,
-				height: size,
-				className,
-				viewBox: `0 0 16 16`,
-				fill: `none`,
-				xmlns: `http://www.w3.org/2000/svg`,
-				'aria-hidden': `true`,
-				strokeWidth: 1,
-			},
-			h(`path`, {
-				d: `M3.4041 13.096C2.49514 12.187 1.87614 11.0288 1.62537 9.76798C1.37459 8.50716 1.50331 7.20028 1.99525 6.01261C2.48719 4.82494 3.32025 3.80981 4.3891 3.09557C5.45795 2.38134 6.71458 2.00008 8.0001 2C9.28563 2.00008 10.5423 2.38134 11.6111 3.09557C12.68 3.80981 13.513 4.82494 14.005 6.01261C14.4969 7.20028 14.6256 8.50716 14.3748 9.76798C14.1241 11.0288 13.5051 12.187 12.5961 13.096`,
-				stroke: `currentColor`,
-			}),
-			h(`path`, { d: `M8 8.49994L11.6114 4.88855`, stroke: `currentColor` }),
-			h(`path`, {
-				d: `M8 9.75C8.69036 9.75 9.25 9.19036 9.25 8.5C9.25 7.80964 8.69036 7.25 8 7.25C7.30964 7.25 6.75 7.80964 6.75 8.5C6.75 9.19036 7.30964 9.75 8 9.75Z`,
-				fill: `currentColor`,
-			}),
-		);
 	}
 
 	/**
@@ -277,5 +248,5 @@ export function createCostDialog(react, reactDom) {
 		);
 	}
 
-	return { useCostDialog, panel, details, Hint, IconGaugeOutlineRegular, IconInfoOutlineRegular };
+	return { useCostDialog, panel, details, Hint, IconInfoOutlineRegular };
 }

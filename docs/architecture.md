@@ -38,6 +38,7 @@
 | `client/pricing-table.js` | Provider/model price rows with per-model peak rules / 按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
+| `client/icons.js` | Price tag glyph shared by both chips and both panel titles / 会话胶囊、本轮胶囊和两个面板标题共用的价格标签图标 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |
 | `client/styles.css`, `client/styles.js` | Stylesheet and idempotent injection / 样式文件及防重复注入 |
 
@@ -101,5 +102,7 @@ node tests/install-smoke.mjs
 
 Tests use the installed DSH runtime. `DSH_RUNTIME_ROOT` can select a different runtime. The install smoke test uses an isolated `DSH_HOME` and tests the package version from `package.json`. It does not change the user's profiles.
 
-Set `PLAYWRIGHT_MODULE` to an installed Playwright module to include desktop configuration checks. `node tests/screenshot-cards.mjs` creates desktop session and turn screenshots from the actual components; it also requires Playwright. Set `SCREENSHOT_DIR` to keep verification images outside `docs/images`.
+Set `PLAYWRIGHT_MODULE` to an installed Playwright module to include desktop configuration checks. `node tests/screenshot-cards.mjs` creates desktop session and turn screenshots from the actual components; `node tests/screenshot-overview.mjs` draws the overview image with both panels and both chips. Both scripts require Playwright and the same `REACT_MODULE_ROOT` and `PLAYWRIGHT_MODULE` variables. Set `SCREENSHOT_DIR` to keep verification images outside `docs/images`.
+
+The repository root holds `screenshots.json`. It lists the overview, turn and session images as relative paths, so the plugin registry picks them up for the market card and the detail dialog. Keep the paths relative to the repository root and use PNG files.
 Set `SCREENSHOT_LOCALE=en` to check the English cards. If React is not exposed by the global DSH package, set `REACT_MODULE_ROOT` to a directory that can resolve React and ReactDOM.
