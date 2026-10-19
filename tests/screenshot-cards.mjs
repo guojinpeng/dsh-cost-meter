@@ -166,6 +166,10 @@ try {
 	assert.ok(branchBox.x < usageBox.x, 'the branch button keeps the host order');
 	assert.ok(usageBox.x < chipBox.x, 'the chip follows the official usage pill');
 	assert.ok(chipBox.x + chipBox.width <= timeBox.x, 'the clock stays last');
+	await page.locator('#usage').evaluate((element) => element.remove());
+	const bareChip = await hostBox('#hostChip');
+	const bareTime = await hostBox('#hostTime');
+	assert.ok(bareChip.x + bareChip.width <= bareTime.x, 'without a usage pill the chip still precedes the clock');
 	const screenshotDir = process.env.SCREENSHOT_DIR ?? 'docs/images';
 	mkdirSync(screenshotDir, { recursive: true });
 	await page.locator('#root .gdcc_dockPill').click();
