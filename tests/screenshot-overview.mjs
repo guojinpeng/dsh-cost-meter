@@ -119,7 +119,8 @@ const configReady = new Promise(resolve => { window.completeConfigLoad = resolve
 window.fetch = async () => {
  window.configRequests++;
  await configReady;
- return { ok: true, json: async () => ({ config: ${JSON.stringify(config)}, models: ${JSON.stringify(Object.keys(config.pricing))}, revision: 'example' }) };
+ const body = { config: ${JSON.stringify(config)}, models: ${JSON.stringify(Object.keys(config.pricing))}, revision: 'example' };
+	return { ok: true, json: async () => body, text: async () => JSON.stringify(body) };
 };
 import { buildCostView } from './pricing.js';
 import { createConfigStore } from './client/config-store.js';

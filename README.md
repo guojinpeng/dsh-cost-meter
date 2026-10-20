@@ -46,7 +46,7 @@ GitHub contains the source code and release notes.
 - Shows separate USD and CNY totals when a session or turn uses both currencies.
 - Keeps edits in a page draft. The **Save** button at the end of the page writes the configuration. Leaving the page discards unsaved edits. A failed save shows the error and keeps the draft.
 - Shows two flat sections, **Model rates** and **General**, with all content visible. **General** contains the exchange rate, the session/turn visibility controls and the **Show cost statistics in the sidebar** switch (on by default). Turn the switch off to remove the sidebar entry; the overview page keeps its data.
-- Shows the cost overview page for today, 7, 30, 90 days, all history or a custom start and end date. It shows four summary figures, a stacked daily cost or token trend, the cost and token mix, cost by model, the top sessions and the current rate, totals and generation time. Amounts use the configured currency and `cnyPerUsd` rate.
+- Shows the cost overview page for today, 7, 30, 90 days, all history or a custom start and end date. It shows four summary figures, a stacked daily cost or token trend, the cost and token mix, cost by model, the top sessions and the current rate, totals and generation time. The trend uses daily bars; above 20 bars it merges neighbouring dates, and only the all-history range above 60 days with data switches to months. The model table lists every priced model. Amounts use the configured currency and `cnyPerUsd` rate.
 - Caps the cost trend at 20 bars. Above 20 days it merges neighbouring dates and shows the merged span. The **Plugin settings** button opens the plugin page. Preset ranges cache their result for 5 minutes; **Refresh** or a price change recomputes it. Custom date ranges are not cached.
 - Follows the DSH light or dark theme and the DSH Chinese or English language.
 - Expands **More rates** on each model row to show its cache-write price and the automatic off-peak switch. The switch reveals that model's peak rule selector, and the info icon shows the windows of the selected rule.
@@ -104,10 +104,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.3.2:
+Install the generated file in your DSH profile. For version 0.4.1:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.3.2.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.4.1.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.

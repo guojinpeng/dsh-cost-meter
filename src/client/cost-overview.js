@@ -29,6 +29,8 @@ function shortMoneyText(text, withDecimal) {
 	if (match === null) return text;
 	const whole = Number(match[2]);
 	const fraction = match[3] ?? '';
+	// A positive amount below one cent must not read as zero.
+	if (whole === 0 && fraction.slice(0, 2) === '00' && /[1-9]/.test(fraction.slice(2))) return match[1] + '<0.01';
 	if (whole >= 100) return match[1] + String(whole);
 	if (whole >= 10) return match[1] + (withDecimal ? whole + '.' + fraction.slice(0, 1) : String(whole));
 	return match[1] + whole + '.' + (fraction + '00').slice(0, 2);
@@ -110,7 +112,8 @@ export function createCostOverviewPage(react, store) {
 		const money = (micros) => formatMoney(micros, currency, cnyPerUsd);
 		const loading = state.status === 'loading' && data === null;
 		const refreshing = state.status === 'loading' && data !== null;
-		const failed = state.status === 'error' && data === null;
+		// A failed refresh keeps the previous payload and still reports the error.
+		const failed = state.status === 'error';
 
 		const cachedBadge =
 			data?.cached === true

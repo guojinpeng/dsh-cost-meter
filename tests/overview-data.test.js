@@ -299,6 +299,50 @@ test('a custom range counts only its two dates', () => {
 	);
 });
 
+test('route rows keep every model beyond the eight wire routes', () => {
+	const byTime = {};
+	const pricing = {};
+	for (let index = 0; index < 10; index += 1) {
+		const key = `p/m${index}`;
+		byTime[key] = { '2026-10-19/am': bucket((index + 1) * 100000) };
+		pricing[key] = rate(1);
+	}
+	const accounting = addRangeState(emptyAccounting(), stateOf(byTime), null);
+	const rows = routeRows(accounting, { ...config, pricing });
+	assert.equal(rows.length, 10);
+	assert.deepEqual(
+		rows.map((row) => row.route),
+		Array.from({ length: 10 }, (_, index) => `p/m${9 - index}`),
+	);
+	assert.equal(rows[0].totalTokens, 1000000);
+});
+
+test('the overview prices DeepSeek windows from the holiday calendar', () => {
+	const priced = {
+		cnyPerUsd: 7.2,
+		currency: 'USD',
+		pricing: { 'p/a': { ...rate(1), autoOffPeak: true, peakRule: 'deepseek' } },
+	};
+	const entries = [
+		{ header: { id: 'a', createdAt: 1 }, state: stateOf({ 'p/a': { '2026-10-01/am': bucket(1000000) } }) },
+	];
+	const options = {
+		entries,
+		config: priced,
+		range: 'custom',
+		start: '2026-10-01',
+		end: '2026-10-01',
+		now: Date.parse('2026-10-19T05:00:00Z'),
+	};
+	const unknown = buildOverview(options);
+	assert.equal(unknown.view.totalMicros, 1000000);
+	assert.equal(unknown.view.uncertainTokens, 1000000);
+	const holidays = buildOverview({ ...options, calendars: { 2026: ['2026-10-01'] } });
+	assert.equal(holidays.view.totalMicros, 500000);
+	assert.equal(holidays.view.offPeakTokens, 1000000);
+	assert.equal(holidays.view.uncertainTokens, 0);
+});
+
 test('trend bars merge above twenty units and name their span', () => {
 	const units = Array.from({ length: 90 }, (_, index) => ({
 		key: shiftDate('2026-07-22', index),

@@ -182,7 +182,7 @@ export function createCostChips(react, useCostView, dialogs) {
 		if (view === undefined || view === null || view.showDock === false) return null;
 		if (view.initializing) return h(InitializingChip, { t });
 		const amount = view.amounts
-			? formatAmounts(view.amounts, true)
+			? formatAmounts(view.amounts, true, view.currency)
 			: formatChipMoney(view.totalMicros, view.currency, view.cnyPerUsd);
 		const label = t('costValue', { amount });
 		const amounts = view.amounts ?? [];
@@ -232,7 +232,7 @@ export function createCostChips(react, useCostView, dialogs) {
 						pos: dialog.pos,
 						title: t('sessionTitle'),
 						value: view.amounts
-							? formatAmounts(view.amounts)
+							? formatAmounts(view.amounts, false, view.currency)
 							: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
 						icon: CostIcon,
 						children,
@@ -276,7 +276,7 @@ export function createCostChips(react, useCostView, dialogs) {
 		if (entry === undefined) return null;
 		const label = entry.priced
 			? entry.amounts
-				? formatAmounts(entry.amounts, true)
+				? formatAmounts(entry.amounts, true, view.currency)
 				: formatChipMoney(entry.micros, view.currency, view.cnyPerUsd)
 			: t('noPricing');
 		const routes = entry.routes ?? [];
@@ -309,7 +309,7 @@ export function createCostChips(react, useCostView, dialogs) {
 						pos: dialog.pos,
 						title: t('turnTitle'),
 						value: entry.amounts
-							? formatAmounts(entry.amounts)
+							? formatAmounts(entry.amounts, false, view.currency)
 							: formatMoney(entry.micros, view.currency, view.cnyPerUsd),
 						icon: CostIcon,
 						children,

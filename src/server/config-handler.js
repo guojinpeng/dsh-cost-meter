@@ -22,16 +22,24 @@ function readBody(req, limit) {
 	return new Promise((resolve, reject) => {
 		const chunks = [];
 		let size = 0;
+		let settled = false;
+		const settle = (action, value) => {
+			if (settled) return;
+			settled = true;
+			action(value);
+		};
 		req.on('data', (chunk) => {
+			if (settled) return;
 			size += chunk.length;
 			if (size > limit) {
-				reject(new Error('config body too large'));
+				// Keep reading to drain the socket; the caller answers with 400.
+				settle(reject, new Error('config body too large'));
 				return;
 			}
 			chunks.push(chunk);
 		});
-		req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-		req.on('error', reject);
+		req.on('end', () => settle(resolve, Buffer.concat(chunks).toString('utf8')));
+		req.on('error', (error) => settle(reject, error));
 	});
 }
 

@@ -14,7 +14,12 @@ const initial = () => ({
 		pricing: { 'p/a': zeroRate() },
 	},
 });
-const response = (body, status = 200) => ({ ok: status === 200, status, json: async () => body });
+const response = (body, status = 200) => ({
+	ok: status === 200,
+	status,
+	json: async () => body,
+	text: async () => JSON.stringify(body),
+});
 
 test('queued edits and sync use consecutive revisions and preserve unrelated fields', async () => {
 	let state = initial();
@@ -72,6 +77,16 @@ test('a GET started during a write cannot replace its committed prices', async (
 	completeGet();
 	await get;
 	assert.equal(store.getSnapshot().config.pricing['p/a'].input, 4);
+});
+
+test('a failed request with a non-JSON body keeps its HTTP status', async () => {
+	const store = createConfigStore(async () => ({
+		ok: false,
+		status: 503,
+		text: async () => 'Bad Gateway',
+	}));
+	await assert.rejects(store.load(), (error) => error.status === 503 && error.message === 'HTTP 503');
+	assert.equal(store.getLoadStatus(), 'error');
 });
 
 test('revision conflict merges other fields but rejects a conflicting price', async () => {

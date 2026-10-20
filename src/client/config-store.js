@@ -33,9 +33,14 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 						body: JSON.stringify(body),
 					},
 		);
-		const payload = await response.json();
+		// An error body can be plain text or empty, so parse only after the status check.
+		const text = await response.text();
+		let payload = null;
+		try {
+			payload = text === '' ? null : JSON.parse(text);
+		} catch {}
 		if (!response.ok) {
-			const error = new Error(payload.error ?? `HTTP ${response.status}`);
+			const error = new Error(payload?.error ?? `HTTP ${response.status}`);
 			error.status = response.status;
 			throw error;
 		}

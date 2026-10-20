@@ -58,6 +58,15 @@ test('repeat requests reuse the cached payload and refresh recomputes it', async
 	assert.deepEqual(readdirSync(dir), ['30-day-statistics.json']);
 });
 
+test('prototype keys and a custom range without dates are rejected', async () => {
+	const dir = mkdtempSync(join(tmpdir(), 'gdcc-handler-'));
+	const { call } = harness(createOverviewCache(dir));
+	for (const url of ['/overview?days=toString', '/overview?days=__proto__', '/overview?days=custom']) {
+		const result = await call(url);
+		assert.equal(result.status, 400, url);
+	}
+});
+
 test('a custom range is never cached and an inverted range is rejected', async () => {
 	const dir = mkdtempSync(join(tmpdir(), 'gdcc-handler-'));
 	const { call } = harness(createOverviewCache(dir));

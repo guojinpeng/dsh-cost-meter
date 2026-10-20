@@ -39,9 +39,9 @@ export function formatChipMoney(micros, currency, cnyPerUsd) {
 }
 
 /** Values in each group are already expressed in that group's currency. */
-export function formatAmounts(amounts, compact = false) {
+export function formatAmounts(amounts, compact = false, currency = 'USD') {
 	const format = compact ? formatChipMoney : formatMoney;
-	return (amounts.length ? amounts : [{ currency: 'USD', micros: 0 }])
+	return (amounts.length ? amounts : [{ currency, micros: 0 }])
 		.map((entry) => format(entry.micros, entry.currency, 1))
 		.join(' · ');
 }

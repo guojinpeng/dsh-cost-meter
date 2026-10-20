@@ -20,7 +20,12 @@ const event = (provider, model) => ({
 	type: 'assistant/message',
 	data: { message: { source: { provider, model } } },
 });
-const response = (payload, ok = true) => ({ ok, json: async () => payload });
+const response = (payload, ok = true) => ({
+	ok,
+	status: ok ? 200 : 400,
+	json: async () => payload,
+	text: async () => JSON.stringify(payload),
+});
 
 test('history migration preserves old prices; missing and newly observed routes persist zero', async () => {
 	let stored = {
@@ -405,6 +410,19 @@ test('a declared route joins the model list and leaves with the saved config', a
 	history.save({ ...stored, pricing: { 'p/a': zeroRate() } });
 	assert.deepEqual(history.list(), ['p/a']);
 	assert.deepEqual(Object.keys(stored.pricing), ['p/a']);
+});
+
+test('the view names the display currency even when nothing is priced', () => {
+	const view = buildCostView(
+		{
+			totals: { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+			byRoute: {},
+			turns: {},
+			skippedTurns: 0,
+		},
+		{ currency: 'CNY', cnyPerUsd: 7, pricing: {} },
+	);
+	assert.equal(view.currency, 'CNY');
 });
 
 test('config loading status ends on both success and failure', async () => {

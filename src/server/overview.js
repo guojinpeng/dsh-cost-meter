@@ -9,6 +9,7 @@ import {
 	buildTrend,
 	dayCount,
 	emptyAccounting,
+	inRange,
 	mergeTrend,
 	rangeBounds,
 	rangeDays,
@@ -130,16 +131,16 @@ function displayCurrency(config, view) {
 }
 
 /** Build the whole overview payload from the selected session states. */
-export function buildOverview({ entries, config, range, start = null, end = null, now = Date.now(), titles = new Map() }) {
+export function buildOverview({ entries, config, range, start = null, end = null, now = Date.now(), titles = new Map(), calendars = {} }) {
 	const bounds = rangeBounds(range, { start, end }, now);
-	const accounting = totalsOf(entries.reduce((sum, entry) => addRangeState(sum, entry.state, bounds.start, bounds.end), emptyAccounting()));
+	const accounting = totalsOf(entries.reduce((sum, entry) => addRangeState(sum, entry.state, bounds.start, bounds.end), emptyAccounting(calendars)));
 	const view = buildCostView(accounting, config);
 	const dates = new Set();
 	for (const buckets of Object.values(accounting.byTime))
 		for (const key of Object.keys(buckets)) if (key !== 'unknown') dates.add(key.slice(0, 10));
 	const granularity = range === 'all' && dates.size > MONTH_THRESHOLD_DAYS ? 'month' : 'day';
 	const trend = mergeTrend(buildTrend(accounting, config, granularity));
-	const allRows = sessionRows(entries, config, bounds.start, bounds.end);
+	const allRows = sessionRows(entries, config, bounds.start, bounds.end, calendars);
 	const rows = allRows.slice(0, TOP_SESSIONS);
 	return {
 		generatedAt: now,
@@ -182,6 +183,18 @@ function isDate(value) {
 	return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
 }
 
+/** Load the holiday calendars of every year the selected states date into. */
+async function ensureCalendars(holidays, entries, bounds) {
+	if (holidays === undefined) return {};
+	const years = new Set();
+	for (const { state } of entries)
+		for (const buckets of Object.values(state?.byTime ?? {}))
+			for (const key of Object.keys(buckets))
+				if (inRange(key, bounds.start, bounds.end)) years.add(Number(key.slice(0, 4)));
+	await Promise.all([...years].map((year) => holidays.ensure(year)));
+	return holidays.snapshot();
+}
+
 /** Serve the aggregated cost overview of every session. */
 export function createOverviewHandler(connection, sessionQuery, holidays, liveStateOf, sessionLogs, overviewCache) {
 	const cache = new Map();
@@ -218,12 +231,13 @@ export function createOverviewHandler(connection, sessionQuery, holidays, liveSt
 			respond(res, 400, { error: 'invalid query' });
 			return;
 		}
-		if (!(range in RANGE_DAYS) && range !== 'custom') {
+		// A custom range needs both dates; a named range must be an own property.
+		if (range === 'custom' ? !isDate(start) || !isDate(end) : !Object.hasOwn(RANGE_DAYS, range)) {
 			respond(res, 400, { error: 'unsupported range' });
 			return;
 		}
 		try {
-			const config = readConfig();
+			const config = readConfig(true);
 			const stamp = configStamp();
 			if (range !== 'custom' && !refresh) {
 				const cached = overviewCache?.read(range, stamp);
@@ -237,8 +251,9 @@ export function createOverviewHandler(connection, sessionQuery, holidays, liveSt
 			const { entries, titles } = await statesOf(sessionQuery, definition, { cache, liveStateOf, logs });
 			const now = Date.now();
 			const bounds = rangeBounds(range, { start, end }, now);
+			const calendars = await ensureCalendars(holidays, entries, bounds);
 			await fillTitles(sessionQuery, sessionRows(entries, config, bounds.start, bounds.end).slice(0, TOP_SESSIONS), titles, logs);
-			const payload = buildOverview({ entries, config, range, start, end, now, titles });
+			const payload = buildOverview({ entries, config, range, start, end, now, titles, calendars });
 			if (range !== 'custom') overviewCache?.write(range, stamp, payload);
 			respond(res, 200, payload);
 		} catch (error) {

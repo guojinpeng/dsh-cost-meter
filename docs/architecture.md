@@ -14,6 +14,10 @@
 | `server/schemas.js` | Config input, projection state and wire-view schemas / 配置输入和 projection 状态及输出校验 |
 | `server/usage-events.js` | Event fields and token bucket operations / 事件字段读取、压缩、token 分桶和缓存归属恢复 |
 | `server/projection.js` | Session totals, turn settlement, retention and wire-view caching / 会话累计、轮次结算、保留规则和输出缓存 |
+| `server/session-log.js` | Session log discovery, folded frames and titles / 会话日志发现、压缩帧和标题读取 |
+| `server/overview.js` | Overview route, range validation, calendar loading and cache stamp / 费用统计路由、范围校验、日历加载和缓存戳 |
+| `server/overview-data.js` | Overview KPIs, trend, mix, model rows and top sessions / 总览 KPI、趋势、构成、模型行和高费用会话 |
+| `server/overview-cache.js` | Five-minute preset-range result cache / 预设范围的 5 分钟结果缓存 |
 | `server/config-handler.js` | Authentication, HTTP bodies, revisions, save and price sync / HTTP 认证、请求体、revision、保存和价格同步 |
 | `server/holiday-store.js` | Annual holiday-cn downloads and local date caches / holiday-cn 年度下载、日期缓存和并发请求合并 |
 | `server/price-service.js` | Selected price source and independent catalog services / 所选价格来源及独立缓存服务装配 |
@@ -37,6 +41,7 @@
 | `client/config-page.js` | Settings page composition / 配置页面装配 |
 | `client/pricing-table.js` | Provider/model price rows with per-model peak rules / 按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
+| `client/cost-overview.js` | Overview page: charts, model table, range controls and error banner / 费用统计页面：图表、模型表、范围控件和错误提示 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
 | `client/icons.js` | Price tag glyph shared by both chips and both panel titles / 会话胶囊、本轮胶囊和两个面板标题共用的价格标签图标 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |
@@ -60,7 +65,7 @@ The configuration page loads `@deepseek-ai/dsh-client-ui-primitives` with the mo
 - Keep the staged sync contract: POST `pricing/sync` with a `config` body prices that staged config and returns `preview` plus `report` without writing; without `config` it keeps saving the synced configuration.
 - 保持暂存同步契约：POST `pricing/sync` 带 `config` 体时只对该草稿计价并返回 `preview` 与 `report`，不写盘；不带 `config` 时保持同步并写盘的旧行为。
 - Keep draft values as strings while editing. Validate and convert them before saving.
-- Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; every amount group and route also carries `periodMicros` and `tokensByPeriod` for the peak, off-peak, fixed and unknown windows. Legacy `micros` fields remain expressed in USD for compatibility. Rows and groups with zero money stay hidden in the client.
+- Keep chip ordering and money precision stable. Native model-currency totals are grouped in `amounts`; every amount group carries `bucketMicros` and `periodMicros`. Each route additionally carries `tokensByPeriod`. Both period maps cover the peak, off-peak, fixed and unknown windows. Legacy `micros` fields remain expressed in USD for compatibility. Rows and groups with zero money stay hidden in the client.
 - Preserve current error strings. Error localization is a separate behavior change.
 
 ## Pricing And Cache / 价格与缓存
@@ -100,9 +105,9 @@ npm run pack:release
 node tests/install-smoke.mjs
 ```
 
-Tests use the installed DSH runtime. `DSH_RUNTIME_ROOT` can select a different runtime. The install smoke test uses an isolated `DSH_HOME` and tests the package version from `package.json`. It does not change the user's profiles.
+Tests use the installed DSH runtime. `DSH_RUNTIME_ROOT` can select a different runtime. The install smoke test runs on Windows only: it calls `npm.cmd`, needs a global DSH install, and installs the tarball from `package.json`'s version, so run `npm run pack:release` first. It uses an isolated `DSH_HOME` and a local `127.0.0.1` server. It does not change the user's profiles.
 
 Set `PLAYWRIGHT_MODULE` to an installed Playwright module to include desktop configuration checks. `node tests/screenshot-cards.mjs` creates desktop session and turn screenshots from the actual components; `node tests/screenshot-overview.mjs` draws the overview image with both panels, both chips and one price formula popover. Both scripts require Playwright and the same `REACT_MODULE_ROOT` and `PLAYWRIGHT_MODULE` variables. Set `SCREENSHOT_DIR` to keep verification images outside `docs/images`.
 
-The repository root holds `screenshots.json`. It lists the overview, turn and session images as relative paths, so the plugin registry picks them up for the market card and the detail dialog. Keep the paths relative to the repository root and use PNG files.
+The repository root holds `screenshots.json`. It lists the overview, cost overview and session cost detail images as relative paths, so the plugin registry picks them up for the market card and the detail dialog. `docs/images/turn-cost.png` and the localized variants are not registered there. Keep the paths relative to the repository root and use PNG files.
 Set `SCREENSHOT_LOCALE=en` to check the English cards. If React is not exposed by the global DSH package, set `REACT_MODULE_ROOT` to a directory that can resolve React and ReactDOM.

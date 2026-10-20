@@ -202,8 +202,15 @@ export function buildCostView(accounting, config) {
 		};
 	}
 	const prompt = tokensOf(accounting.totals) - accounting.totals.outputTokens;
+	// The view total is USD money; name the currency that displays it.
+	const currency =
+		config.currency === 'USD' || config.currency === 'CNY'
+			? config.currency
+			: amounts.some((entry) => entry.currency === 'CNY')
+				? 'CNY'
+				: 'USD';
 	return {
-		currency: 'USD',
+		currency,
 		cnyPerUsd: config.cnyPerUsd,
 		totalMicros,
 		totalTokens: tokensOf(accounting.totals),

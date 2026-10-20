@@ -184,17 +184,18 @@ export function buildTimeOfDay(accounting, config) {
 
 /** One row per route with the four priced series, for the model table. */
 export function routeRows(accounting, config) {
+	totalsOf(accounting);
 	const rows = [];
-	for (const route of buildCostView(totalsOf(accounting), config).routes) {
-		const buckets = accounting.byRoute[route.route];
-		if (buckets === undefined || route.totalTokens === 0) continue;
+	// The wire view keeps only eight routes, so price each configured route alone.
+	for (const [route, buckets] of Object.entries(accounting.byRoute)) {
+		if (tokensOf(buckets) === 0) continue;
 		const single = emptyAccounting(accounting.calendars);
-		single.byRoute = { [route.route]: buckets };
-		single.byTime = accounting.byTime[route.route] ? { [route.route]: accounting.byTime[route.route] } : {};
+		single.byRoute = { [route]: buckets };
+		single.byTime = accounting.byTime[route] ? { [route]: accounting.byTime[route] } : {};
 		single.totals = buckets;
 		const view = buildCostView(single, config);
 		rows.push({
-			...route,
+			...view.routes[0],
 			bucketMicros: view.bucketMicros,
 			tokens: {
 				input: buckets.uncachedInputTokens,
@@ -204,14 +205,14 @@ export function routeRows(accounting, config) {
 			},
 		});
 	}
-	return rows;
+	return rows.sort((left, right) => right.micros - left.micros || right.totalTokens - left.totalTokens);
 }
 
 /** One row per session that recorded usage inside the range. */
-export function sessionRows(entries, config, start, end = null) {
+export function sessionRows(entries, config, start, end = null, calendars = {}) {
 	const rows = [];
 	for (const { header, state } of entries) {
-		const accounting = totalsOf(addRangeState(emptyAccounting(), state, start, end));
+		const accounting = totalsOf(addRangeState(emptyAccounting(calendars), state, start, end));
 		const view = buildCostView(accounting, config);
 		if (view.totalTokens === 0) continue;
 		rows.push({

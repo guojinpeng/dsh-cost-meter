@@ -28,7 +28,12 @@ const diModel = (model_name, pricing = {}) => ({
 	type: 'text-generation',
 	pricing: { type: 'tokens', cents_per_input_token: 0.00002, cents_per_output_token: 0.00006, ...pricing },
 });
-const jsonResponse = (body, status = 200) => ({ ok: status === 200, status, json: async () => body });
+const jsonResponse = (body, status = 200) => ({
+	ok: status === 200,
+	status,
+	json: async () => body,
+	text: async () => JSON.stringify(body),
+});
 
 test('OpenRouter converts USD/token, keeps zero and preserves missing cache fields', () => {
 	const previous = { ...zeroRate(), cacheWrite: 9, currency: 'CNY', source: 'manual' };
