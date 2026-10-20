@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -17,9 +18,7 @@ const FRAME_BATCH = 32;
 /** Uncompressed lines read per turn of the event loop. */
 const LINE_BATCH = 2000;
 /** Cache file format version. */
-const CACHE_VERSION = 1;
-/** Cache directory names must be plain path segments. */
-const CACHE_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const CACHE_VERSION = 2;
 
 /** Let pending I/O and timers run between slices of a large fold. */
 const breathe = () => new Promise((resolve) => setImmediate(resolve));
@@ -91,17 +90,25 @@ function parseLine(text) {
 	}
 }
 
+/** The identity of the bytes a cached fold has already consumed. */
+function hashPrefix(buffer, length) {
+	return createHash('sha256').update(buffer.subarray(0, length)).digest('hex');
+}
+
 /**
- * Read the events of one session log, one slice at a time, and hand each event
+ * Read the events of one log buffer, one slice at a time, and hand each event
  * to the callback. The log is never fully parsed into an array, so the peak
  * memory stays near the size of the compressed file.
  *
- * @param location - a location from the session log reader.
+ * @param buffer - the bytes of one session log.
+ * @param zstd - whether the log is compressed.
  * @param onEvent - receives each parsed event.
+ * @param resume - the byte offset and partial line of an earlier fold.
+ * @returns the offset of the last readable frame, the partial trailing line,
+ * and whether a later fold can resume from that offset.
  */
-async function eachEvent(location, onEvent) {
-	const buffer = await readFile(location.path);
-	if (!location.zstd) {
+async function scanEvents(buffer, zstd, onEvent, { from = 0, carry = '' } = {}) {
+	if (!zstd) {
 		const text = buffer.toString('utf8');
 		let start = 0;
 		let count = 0;
@@ -110,16 +117,17 @@ async function eachEvent(location, onEvent) {
 			const line = end === -1 ? text.slice(start) : text.slice(start, end);
 			const event = parseLine(line);
 			if (event !== undefined) onEvent(event);
-			if (end === -1) return;
+			if (end === -1) return { offset: 0, carry: '', resumable: false };
 			start = end + 1;
 			if (++count % LINE_BATCH === 0) await breathe();
 		}
 	}
 	if (typeof zlib.zstdDecompressSync !== 'function')
 		throw new Error('zstd is not available in this Node.js');
-	const frames = completeFrames(buffer);
-	if (frames.length === 0 && buffer.length > 0) throw new Error('unreadable session log');
-	let carry = '';
+	const view = from === 0 ? buffer : buffer.subarray(from);
+	const frames = completeFrames(view);
+	if (from === 0 && frames.length === 0 && buffer.length > 0) throw new Error('unreadable session log');
+	let offset = from;
 	let truncated = false;
 	for (let index = 0; index < frames.length; index += FRAME_BATCH) {
 		// Decode a small group, then let the event loop run: a synchronous frame
@@ -128,7 +136,7 @@ async function eachEvent(location, onEvent) {
 		for (const frame of frames.slice(index, index + FRAME_BATCH)) {
 			let text;
 			try {
-				text = zlib.zstdDecompressSync(buffer.subarray(frame.start, frame.end)).toString('utf8');
+				text = zlib.zstdDecompressSync(view.subarray(frame.start, frame.end)).toString('utf8');
 			} catch {
 				// A corrupt frame ends the readable part of the log.
 				truncated = true;
@@ -140,6 +148,7 @@ async function eachEvent(location, onEvent) {
 				const event = parseLine(line);
 				if (event !== undefined) onEvent(event);
 			}
+			offset = from + frame.end;
 		}
 		if (truncated) break;
 		if (index + FRAME_BATCH < frames.length) await breathe();
@@ -148,6 +157,7 @@ async function eachEvent(location, onEvent) {
 		const event = parseLine(carry);
 		if (event !== undefined) onEvent(event);
 	}
+	return { offset, carry, resumable: !truncated };
 }
 
 /** The newest log file of one session directory. */
@@ -178,14 +188,19 @@ function newestLog(dir) {
  * seconds and also exposes the logged session titles.
  *
  * Folds are asynchronous and slice their work, so a cold history does not
- * block the event loop. With a cache directory, each folded session state is
- * written to disk and reused until the log changes.
+ * block the event loop. Definitions passed here are folded together in one
+ * pass and cached in one file per session, so a second consumer reads the
+ * result instead of decoding the log again.
+ *
+ * The cache also records the bytes already consumed and a hash of them. A log
+ * that only grew is folded from its new frames; any other change refolds it.
  *
  * @param options - root overrides the sessions directory, cacheDir enables the
- * disk cache, onError receives each read failure.
+ * disk cache, definitions are folded together by foldCached, onError receives
+ * each read failure.
  * @returns the log reader: locate, stampOf, fold, foldCached, titleOf.
  */
-export function createSessionLogs({ root, cacheDir, onError = () => {} } = {}) {
+export function createSessionLogs({ root, cacheDir, definitions = [], onError = () => {} } = {}) {
 	const base = root ?? join(resolveDshHome(), 'sessions');
 	let layout = new Map();
 	let listedAt = 0;
@@ -236,7 +251,8 @@ export function createSessionLogs({ root, cacheDir, onError = () => {} } = {}) {
 		let state = definition.init();
 		let title;
 		try {
-			await eachEvent(location, (event) => {
+			const buffer = await readFile(location.path);
+			await scanEvents(buffer, location.zstd, (event) => {
 				if (event?.type === 'session/title' && typeof event.data?.title === 'string' && event.data.title !== '')
 					title = event.data.title;
 				state = definition.apply(state, event);
@@ -248,44 +264,51 @@ export function createSessionLogs({ root, cacheDir, onError = () => {} } = {}) {
 		return { state, title };
 	}
 
-	/** The cache file of one session state, or null when caching is off. */
-	function cachePath(name, id) {
-		if (cacheDir === undefined || !CACHE_NAME.test(name)) return null;
-		if (typeof id !== 'string' || id === '' || id.includes('/') || id.includes('\\')) return null;
-		return join(cacheDir, name, id + '.json');
+	/** The cache file of one session, or null when caching is off. */
+	function cachePath(id) {
+		if (cacheDir === undefined || definitions.length === 0) return null;
+		if (typeof id !== 'string' || id === '' || id.includes('/') || id.includes('\\') || id.includes('..'))
+			return null;
+		return join(cacheDir, id + '.json');
 	}
 
-	/** A cached fold result, or null when missing, stale, or unreadable. */
-	function readCache(path, stamp, definition) {
+	/** A cache entry, or null when missing or unreadable. */
+	function readCache(path) {
 		try {
 			const entry = JSON.parse(readFileSync(path, 'utf8'));
-			if (entry === null || typeof entry !== 'object') return null;
-			if (entry.version !== CACHE_VERSION || entry.stamp !== stamp) return null;
-			if (entry.stateVersion !== (definition.stateVersion ?? null)) return null;
-			if (definition.stateSchema !== undefined && !definition.stateSchema.safeParse(entry.state).success)
-				return null;
-			return { state: entry.state, title: entry.title };
+			return entry !== null && typeof entry === 'object' ? entry : null;
 		} catch {
 			return null;
 		}
 	}
 
+	/** True when the entry holds a usable state for every folded definition. */
+	function entryUsable(entry) {
+		if (entry === null || entry.version !== CACHE_VERSION) return false;
+		if (entry.states === null || typeof entry.states !== 'object') return false;
+		for (const { name, definition } of definitions) {
+			const stored = entry.states[name];
+			if (stored === null || typeof stored !== 'object') return false;
+			if (stored.stateVersion !== (definition.stateVersion ?? null)) return false;
+			if (definition.stateSchema !== undefined && !definition.stateSchema.safeParse(stored.state).success)
+				return false;
+		}
+		return true;
+	}
+
+	/** The folded states of a cache entry. */
+	function unpackStates(entry) {
+		const states = {};
+		for (const { name } of definitions) states[name] = entry.states[name].state;
+		return states;
+	}
+
 	/** Persist one fold result; a write failure never breaks the read. */
-	function writeCache(path, stamp, definition, folded) {
+	function writeCache(path, entry) {
 		try {
 			mkdirSync(join(path, '..'), { recursive: true });
 			const temporary = path + '.tmp-' + String(process.pid);
-			writeFileSync(
-				temporary,
-				JSON.stringify({
-					version: CACHE_VERSION,
-					stamp,
-					stateVersion: definition.stateVersion ?? null,
-					title: folded.title,
-					state: folded.state,
-				}),
-				'utf8',
-			);
+			writeFileSync(temporary, JSON.stringify(entry), 'utf8');
 			renameSync(temporary, path);
 		} catch {
 			// The cache is an optimisation: failing to write it is not an error.
@@ -293,22 +316,74 @@ export function createSessionLogs({ root, cacheDir, onError = () => {} } = {}) {
 	}
 
 	/**
-	 * Fold one log, reusing the on-disk state of an unchanged log.
+	 * Fold one log once for every configured definition, reusing the on-disk
+	 * state of an unchanged log and the new frames of a log that only grew.
 	 * @param id - session id, used as the cache file name.
 	 * @param location - the newest log file of the session.
 	 * @param stamp - the change stamp of that log.
-	 * @param definition - the projection definition.
-	 * @param name - cache directory name, for example "cost".
+	 * @returns the states by definition name and the title, or null.
 	 */
-	async function foldCached(id, location, stamp, definition, name) {
-		const path = stamp === null ? null : cachePath(name, id);
-		if (path !== null) {
-			const cached = readCache(path, stamp, definition);
-			if (cached !== null) return cached;
+	async function foldCached(id, location, stamp) {
+		const path = stamp === null ? null : cachePath(id);
+		const entry = path === null ? null : readCache(path);
+		if (entry !== null && entry.stamp === stamp && entryUsable(entry))
+			return { states: unpackStates(entry), title: entry.title };
+		let buffer;
+		try {
+			buffer = await readFile(location.path);
+		} catch (error) {
+			onError(error);
+			return null;
 		}
-		const folded = await fold(location, definition);
-		if (folded !== null && path !== null) writeCache(path, stamp, definition, folded);
-		return folded;
+		let start = 0;
+		let carry = '';
+		let states = null;
+		let title;
+		if (
+			entryUsable(entry) &&
+			Number.isInteger(entry.offset) &&
+			entry.offset > 0 &&
+			typeof entry.prefixHash === 'string' &&
+			typeof entry.carry === 'string' &&
+			buffer.length >= entry.offset &&
+			hashPrefix(buffer, entry.offset) === entry.prefixHash
+		) {
+			start = entry.offset;
+			carry = entry.carry;
+			states = unpackStates(entry);
+			title = entry.title;
+		}
+		if (states === null) {
+			states = {};
+			for (const { name, definition } of definitions) states[name] = definition.init();
+		}
+		let progress;
+		try {
+			progress = await scanEvents(buffer, location.zstd, (event) => {
+				if (event?.type === 'session/title' && typeof event.data?.title === 'string' && event.data.title !== '')
+					title = event.data.title;
+				for (const { name, definition } of definitions) states[name] = definition.apply(states[name], event);
+			}, { from: start, carry });
+		} catch (error) {
+			onError(error);
+			return null;
+		}
+		if (path !== null)
+			writeCache(path, {
+				version: CACHE_VERSION,
+				stamp,
+				offset: progress.offset,
+				carry: progress.carry,
+				prefixHash: progress.resumable ? hashPrefix(buffer, progress.offset) : null,
+				title,
+				states: Object.fromEntries(
+					definitions.map(({ name, definition }) => [
+						name,
+						{ stateVersion: definition.stateVersion ?? null, state: states[name] },
+					]),
+				),
+			});
+		return { states, title };
 	}
 
 	/** The last logged title of one session, when the log holds one. */

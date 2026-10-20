@@ -14,7 +14,7 @@
 | `server/schemas.js` | Config input, projection state and wire-view schemas / 配置输入和 projection 状态及输出校验 |
 | `server/usage-events.js` | Event fields and token bucket operations / 事件字段读取、压缩、token 分桶和缓存归属恢复 |
 | `server/projection.js` | Session totals, turn settlement, retention and wire-view caching / 会话累计、轮次结算、保留规则和输出缓存 |
-| `server/session-log.js` | Session log discovery, folded frames, titles and folded-state disk cache / 会话日志发现、压缩帧、标题读取和折叠状态磁盘缓存 |
+| `server/session-log.js` | Session log discovery, shared folds, titles and folded-state disk cache / 会话日志发现、共享折叠、标题读取和折叠状态磁盘缓存 |
 | `server/overview.js` | Overview route, range validation, calendar loading and cache stamp / 费用统计路由、范围校验、日历加载和缓存戳 |
 | `server/overview-data.js` | Overview KPIs, trend, mix, model rows and top sessions / 总览 KPI、趋势、构成、模型行和高费用会话 |
 | `server/overview-cache.js` | Five-minute preset-range result cache / 预设范围的 5 分钟结果缓存 |
@@ -30,9 +30,9 @@
 
 历史模型发现和初始化由 `history.js` 协调，各来源适配器统一输出 USD / 百万 token 单价。共享同步负责币种转换、模型来源标记和峰谷兼容检查；共享计价函数仍保持纯计算。各规则独立实现时段判断，计价时按模型条目自己所选的 `peakRule` 调用。
 
-Folded session states are cached under `data/cache/sessions/<kind>/<session-id>.json`. An entry is valid only when the log stamp (modification time and size) and the definition's state version match; the overview uses kind `cost`, the history scan uses `history`. Stale or corrupt entries are ignored and rebuilt. Folds decode and apply events one by one, and every 32 compressed frames or 2000 plain lines the fold yields to the event loop.
+Folded session states are cached under `data/cache/sessions/<session-id>.json`. The history scan and the overview share one fold per log, so one file holds the `history` and `cost` states of that session. An entry is valid only when the log stamp (modification time and size) and every definition's state version match. Stale or corrupt entries are ignored and rebuilt. A log that only grew is folded from its new frames: the entry stores the bytes already consumed and their hash, so the history scan writes both states without decoding the old frames again. Folds decode and apply events one by one, and every 32 compressed frames or 2000 plain lines the fold yields to the event loop.
 
-会话折叠状态缓存在 `data/cache/sessions/<用途>/<会话 ID>.json`。仅当日志戳（修改时间与大小）和定义的 state version 同时匹配时缓存有效；费用统计使用 `cost`，历史扫描使用 `history`。过期或损坏的缓存直接重算。折叠逐事件解码并立即应用，每 32 个压缩帧或 2000 行让出事件循环。
+会话折叠状态缓存在 `data/cache/sessions/<会话 ID>.json`。历史扫描与费用统计共用一次折叠，一个文件同时保存该会话的 `history` 和 `cost` 状态。仅当日志戳（修改时间与大小）和所有定义的 state version 同时匹配时缓存有效。过期或损坏的缓存直接重算。只追加内容的日志从新帧继续折叠：缓存记录已读取的字节数及其哈希，历史扫描因此可同时写入两种状态，不重复解码旧帧。折叠逐事件解码并立即应用，每 32 个压缩帧或 2000 行让出事件循环。
 
 
 ## Client / 前端

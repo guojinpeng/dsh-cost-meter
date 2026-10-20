@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { createHistoryModels } from './history.js';
+import { createHistoryDefinition, createHistoryModels } from './history.js';
 import { createPriceService } from './server/price-service.js';
 import { PLUGIN_ID, HTTP_BASE, PROJECTION_KEY } from './identity.js';
 import { CONFIG_PATH, readConfig, writeConfig, seedConfigFile } from './server/config-store.js';
@@ -30,7 +30,8 @@ export function apply(ctx) {
 		ctx.logger?.warn('Could not load holiday calendar', error),
 	);
 	holidays.ensure(new Date(Date.now() + 8 * 3600000).getUTCFullYear());
-	ctx.sessionProjections.register(createCostUsageProjection(readConfig, holidays));
+	const costProjection = createCostUsageProjection(readConfig, holidays);
+	ctx.sessionProjections.register(costProjection);
 	// Headless profiles still get the projection; HTTP requires browser auth.
 	ctx.inject(['sessionQuery'], (queryCtx) => {
 		const prices = createPriceService(join(dirname(CONFIG_PATH), 'data'));
@@ -38,8 +39,15 @@ export function apply(ctx) {
 		// Session logs are read directly, which is much faster than replaying
 		// every event through the host query service.
 		let warnedLog = false;
+		// Both projections share one fold and one cache file per session: the
+		// startup scan writes the cost state as well, instead of the overview
+		// page decoding every log again.
 		const sessionLogs = createSessionLogs({
 			cacheDir: join(dirname(CONFIG_PATH), 'data', 'cache', 'sessions'),
+			definitions: [
+				{ name: 'history', definition: createHistoryDefinition() },
+				{ name: 'cost', definition: costProjection },
+			],
 			onError: (error) => {
 				if (warnedLog) return;
 				warnedLog = true;

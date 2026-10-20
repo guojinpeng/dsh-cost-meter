@@ -103,10 +103,10 @@ npm pack
 ```
 
 `npm pack` 也会执行构建，生成 `guojinpeng-dsh-cost-meter-<版本号>.tgz`。
-将生成的文件安装到你的 DSH profile。以 0.4.2 为例：
+将生成的文件安装到你的 DSH profile。以 0.4.3 为例：
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.4.2.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.4.3.tgz
 ```
 
 重启 DSH，检查插件。每次修改后，重新构建、打包并安装。

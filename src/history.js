@@ -27,6 +27,20 @@ export const configuredKeys = (config) => Object.keys(config.pricing ?? {}).filt
 /** The model set the config page lists: history routes plus declared routes. */
 export const allModels = (models, config) => [...new Set([...models, ...configuredKeys(config)])].sort();
 
+/** The projection that records every route and year found in one log. */
+export function createHistoryDefinition() {
+	return {
+		init: () => ({ routes: [], years: [] }),
+		apply: (state, event) => {
+			if (Number.isFinite(event?.time)) state.years.push(new Date(event.time + 8 * 3600000).getUTCFullYear());
+			const route = routeFromEvent(event);
+			if (route) state.routes.push(route);
+			return state;
+		},
+		stateVersion: 1,
+	};
+}
+
 export function createHistoryModels(
 	sessionQuery,
 	{ readConfig, writeConfig, backupConfig, initializePrices, sessionLogs, onError = () => {} },
@@ -106,17 +120,7 @@ export function createHistoryModels(
 								return [];
 							});
 							const discovered = new Set();
-							const definition = {
-								init: () => ({ routes: [], years: [] }),
-								apply: (state, event) => {
-									if (Number.isFinite(event?.time))
-										state.years.push(new Date(event.time + 8 * 3600000).getUTCFullYear());
-									const route = routeFromEvent(event);
-									if (route) state.routes.push(route);
-									return state;
-								},
-								stateVersion: 1,
-							};
+							const definition = createHistoryDefinition();
 							const collect = (state) => {
 								for (const year of state.years) years.add(year);
 								for (const route of state.routes) discovered.add(route);
@@ -133,11 +137,10 @@ export function createHistoryModels(
 										id,
 										location,
 										sessionLogs.stampOf?.(location) ?? null,
-										definition,
-										'history',
 									);
-									if (folded !== null) {
-										collect(folded.state);
+									const state = folded?.states?.history;
+									if (state !== undefined) {
+										collect(state);
 										continue;
 									}
 								}

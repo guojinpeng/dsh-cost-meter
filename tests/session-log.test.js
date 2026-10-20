@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
-import { createHistoryModels } from '../src/history.js';
+import { createHistoryDefinition, createHistoryModels } from '../src/history.js';
 import { createSessionLogs } from '../src/server/session-log.js';
 
 const EVENT_TIME = Date.parse('2026-10-19T02:00:00Z');
@@ -48,6 +48,15 @@ const counter = () => {
 		},
 	};
 };
+/** A stateful definition that counts the events it was given. */
+const tally = () => ({
+	init: () => ({ count: 0 }),
+	apply: (state, event) => {
+		state.count += 1;
+		return state;
+	},
+	stateVersion: 1,
+});
 
 test('a compressed session log is located, folded and titled', async () => {
 	const root = makeHome();
@@ -129,7 +138,10 @@ test('the history scan reads log files instead of replaying them through the hos
 			readConfig: () => ({ currency: 'CNY', cnyPerUsd: 7, formatVersion: 2, pricing: {} }),
 			writeConfig: (next) => next,
 			backupConfig: () => {},
-			sessionLogs: createSessionLogs({ root }),
+			sessionLogs: createSessionLogs({
+				root,
+				definitions: [{ name: 'history', definition: createHistoryDefinition() }],
+			}),
 		},
 	);
 	const config = await history.config();
@@ -143,30 +155,63 @@ test('a folded session is cached until its log or its definition changes', async
 		'session.v1.jsonl': Buffer.from(JSON.stringify(message('deepseek', 'v3.2')) + '\n'),
 	});
 	const cacheDir = mkdtempSync(join(tmpdir(), 'dsh-cost-cache-'));
-	const logs = createSessionLogs({ root, cacheDir });
+	const projection = { name: 'cost', definition: tally() };
+	const logs = createSessionLogs({ root, cacheDir, definitions: [projection] });
 	const location = logs.locate().get('session-cached');
 	const stamp = logs.stampOf(location);
-	const definition = { init: () => 0, apply: (state) => state + 1, stateVersion: 1 };
-	const cacheFile = join(cacheDir, 'cost', 'session-cached.json');
-	const folded = await logs.foldCached('session-cached', location, stamp, definition, 'cost');
-	assert.deepEqual(folded, { state: 1, title: undefined });
+	const cacheFile = join(cacheDir, 'session-cached.json');
+	assert.deepEqual(await logs.foldCached('session-cached', location, stamp), {
+		states: { cost: { count: 1 } },
+		title: undefined,
+	});
 	assert.ok(existsSync(cacheFile));
 	// The state comes from the cache file, so the log is not read again.
 	rmSync(dir, { recursive: true });
-	assert.deepEqual(await logs.foldCached('session-cached', location, stamp, definition, 'cost'), {
-		state: 1,
+	assert.deepEqual(await logs.foldCached('session-cached', location, stamp), {
+		states: { cost: { count: 1 } },
 		title: undefined,
 	});
 	// A changed stamp, a changed projection definition, and a corrupt cache all
 	// fall back to a fold, which reports the missing log.
 	const errors = [];
-	const fresh = createSessionLogs({ root, cacheDir, onError: (error) => errors.push(error) });
-	assert.equal(await fresh.foldCached('session-cached', location, stamp + ':1', definition, 'cost'), null);
+	const fresh = createSessionLogs({ root, cacheDir, definitions: [projection], onError: (error) => errors.push(error) });
+	assert.equal(await fresh.foldCached('session-cached', location, stamp + ':1'), null);
 	assert.equal(errors.length, 1);
-	assert.equal(
-		await fresh.foldCached('session-cached', location, stamp, { ...definition, stateVersion: 2 }, 'cost'),
-		null,
-	);
+	const other = createSessionLogs({
+		root,
+		cacheDir,
+		definitions: [{ name: 'cost', definition: { ...tally(), stateVersion: 2 } }],
+	});
+	assert.equal(await other.foldCached('session-cached', location, stamp), null);
 	writeFileSync(cacheFile, '{');
-	assert.equal(await fresh.foldCached('session-cached', location, stamp, definition, 'cost'), null);
+	assert.equal(await fresh.foldCached('session-cached', location, stamp), null);
+});
+
+test('an appended log is folded from its new frames only', async () => {
+	const root = makeHome();
+	const first = frame([message('deepseek', 'v3.2')]);
+	const dir = makeSession(root, 'session-grow', { 'session.v1.jsonl.zstd': first });
+	const cacheDir = mkdtempSync(join(tmpdir(), 'dsh-cost-cache-'));
+	const logs = createSessionLogs({ root, cacheDir, definitions: [{ name: 'cost', definition: tally() }] });
+	const location = logs.locate().get('session-grow');
+	assert.equal((await logs.foldCached('session-grow', location, logs.stampOf(location))).states.cost.count, 1);
+	// Appending a frame changes the stamp, not the bytes already folded.
+	writeFileSync(join(dir, 'session.v1.jsonl.zstd'), Buffer.concat([first, frame([title('标题'), message('aliyun', 'qwen3-coder')])]));
+	const folded = await logs.foldCached('session-grow', location, logs.stampOf(location));
+	assert.deepEqual(folded, { states: { cost: { count: 3 } }, title: '标题' });
+	const entry = JSON.parse(readFileSync(join(cacheDir, 'session-grow.json'), 'utf8'));
+	assert.equal(entry.offset, statSync(join(dir, 'session.v1.jsonl.zstd')).size);
+});
+
+test('a rewritten log is folded from the start', async () => {
+	const root = makeHome();
+	const dir = makeSession(root, 'session-rewrite', { 'session.v1.jsonl.zstd': frame([message('deepseek', 'v3.2')]) });
+	const cacheDir = mkdtempSync(join(tmpdir(), 'dsh-cost-cache-'));
+	const logs = createSessionLogs({ root, cacheDir, definitions: [{ name: 'cost', definition: tally() }] });
+	const location = logs.locate().get('session-rewrite');
+	assert.equal((await logs.foldCached('session-rewrite', location, logs.stampOf(location))).states.cost.count, 1);
+	// The first frame changes, so the cached prefix hash no longer matches.
+	writeFileSync(join(dir, 'session.v1.jsonl.zstd'), frame([message('aliyun', 'qwen3-coder'), message('aliyun', 'qwen3-coder')]));
+	const folded = await logs.foldCached('session-rewrite', location, logs.stampOf(location));
+	assert.equal(folded.states.cost.count, 2, 'the old state is not reused');
 });

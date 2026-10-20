@@ -69,8 +69,9 @@ async function statesOf(sessionQuery, definition, { cache, liveStateOf, logs }) 
 		}
 		let entry = null;
 		if (location !== undefined) {
-			const folded = await logs.foldCached(header.id, location, stamp, definition, 'cost');
-			if (folded !== null) entry = { stamp, state: folded.state, title: folded.title };
+			const folded = await logs.foldCached(header.id, location, stamp);
+			const state = folded?.states?.cost;
+			if (state !== undefined) entry = { stamp, state, title: folded.title };
 		}
 		if (entry === null) {
 			const state = await foldHost(sessionQuery, definition, header.id);
@@ -198,7 +199,12 @@ async function ensureCalendars(holidays, entries, bounds) {
 /** Serve the aggregated cost overview of every session. */
 export function createOverviewHandler(connection, sessionQuery, holidays, liveStateOf, sessionLogs, overviewCache) {
 	const cache = new Map();
-	const logs = sessionLogs ?? createSessionLogs({ onError: () => {} });
+	const logs =
+		sessionLogs ??
+		createSessionLogs({
+			definitions: [{ name: 'cost', definition: createCostUsageProjection(readConfig, holidays) }],
+			onError: () => {},
+		});
 	return async (req, res) => {
 		const rejection = connection.requestRejection(req);
 		if (rejection !== undefined) {

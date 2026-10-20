@@ -84,3 +84,38 @@ test('a custom range is never cached and an inverted range is rejected', async (
 	const badRange = await call('/overview?days=1');
 	assert.equal(badRange.status, 400);
 });
+test('a persisted session is counted from the shared cost state', async () => {
+	const dir = mkdtempSync(join(tmpdir(), 'gdcc-handler-'));
+	const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+	const state = {
+		byTime: {
+			'deepseek/deepseek-chat': {
+				[day]: { uncachedInputTokens: 1000000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+			},
+		},
+		skippedTurns: 0,
+	};
+	const logs = {
+		locate: () => new Map([['s1', { path: 'session.v1.jsonl.zstd', zstd: true }]]),
+		stampOf: () => 'stamp',
+		foldCached: async () => ({ states: { cost: state }, title: '每日报表' }),
+		titleOf: async () => undefined,
+	};
+	const connection = { requestRejection: () => undefined };
+	const sessionQuery = { listSessions: async () => [{ header: { id: 's1', createdAt: day }, persisted: true }] };
+	const handler = createOverviewHandler(connection, sessionQuery, undefined, () => undefined, logs, createOverviewCache(dir));
+	const call = async (url) => {
+		let head = null;
+		let body = '';
+		const res = { writeHead: (status) => (head = { status }), end: (text) => (body = text) };
+		await handler({ url, method: 'GET', headers: {} }, res);
+		return { status: head.status, body: JSON.parse(body) };
+	};
+	const result = await call('/overview?days=30&refresh=1');
+	assert.equal(result.status, 200);
+	assert.equal(result.body.counts.sessions, 1);
+	assert.equal(result.body.view.totalTokens, 1000000);
+	assert.equal(result.body.sessions[0].id, 's1');
+	assert.equal(result.body.sessions[0].title, '每日报表');
+});
+

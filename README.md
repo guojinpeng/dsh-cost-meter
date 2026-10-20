@@ -104,10 +104,10 @@ npm pack
 ```
 
 `npm pack` also runs the build. It creates `guojinpeng-dsh-cost-meter-<version>.tgz`.
-Install the generated file in your DSH profile. For version 0.4.2:
+Install the generated file in your DSH profile. For version 0.4.3:
 
 ```powershell
-dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.4.2.tgz
+dsh plugin --profile web add -w ./guojinpeng-dsh-cost-meter-0.4.3.tgz
 ```
 
 Restart DSH and check the plugin. Repeat the build, package and install steps after changes.
