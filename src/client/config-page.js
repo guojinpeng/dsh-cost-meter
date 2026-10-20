@@ -1,6 +1,7 @@
 import { PRICE_SOURCES } from '../price-sources.js';
 import { invalidCnyPerUsd } from './config-draft.js';
 import { createPricingTable } from './pricing-table.js';
+import { REFRESH_INTERVALS } from '../refresh.js';
 
 export function createConfigPage(react, ui, useConfigController, dialogs) {
 	const h = react.createElement;
@@ -164,6 +165,32 @@ export function createConfigPage(react, ui, useConfigController, dialogs) {
 								}),
 							]),
 						),
+						h('div', { key: 'autoRefresh', className: 'gdcc_switchRow' }, [
+							h('span', { key: 'label', className: 'gdcc_switchLabel' }, t('configAutoRefreshCost')),
+							h('div', { key: 'controls', className: 'gdcc_switchControls' }, [
+								h(
+									'select',
+									{
+										key: 'interval',
+										className: 'gdcc_select',
+										value: String(draft.autoRefreshMinutes),
+										'aria-label': t('configAutoRefreshCost'),
+										disabled: config.saving || draft.autoRefreshCost === false,
+										onChange: (event) => config.patch('autoRefreshMinutes', Number(event.target.value)),
+									},
+									REFRESH_INTERVALS.map((minutes) =>
+										h('option', { key: minutes, value: String(minutes) }, t('configAutoRefreshEvery', { minutes })),
+									),
+								),
+								h(Switch, {
+									key: 'switch',
+									checked: draft.autoRefreshCost !== false,
+									label: t('configAutoRefreshCost'),
+									disabled: config.saving,
+									onChange: (value) => config.patch('autoRefreshCost', value),
+								}),
+							]),
+						]),
 					]),
 				],
 			),

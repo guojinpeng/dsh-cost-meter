@@ -1,5 +1,6 @@
 import { RATE_KEYS, parseRouteKey, zeroRate } from '../pricing.js';
 import { resolvedPriceSource } from '../price-sources.js';
+import { normalizeRefreshMinutes } from '../refresh.js';
 
 /** Draft rates are text so an input can hold a value the user is still typing. */
 const text = (value) => (value === undefined || value === null || value === '' ? '' : String(value));
@@ -40,6 +41,8 @@ export function buildDraft(payload) {
 		showDockChip: config.showDockChip !== false,
 		showTurnChip: config.showTurnChip !== false,
 		showSidebarCost: config.showSidebarCost !== false,
+		autoRefreshCost: config.autoRefreshCost !== false,
+		autoRefreshMinutes: normalizeRefreshMinutes(config.autoRefreshMinutes),
 		rows: (payload?.models ?? []).map((key) => {
 			const rate = pricing[key] ?? zeroRate();
 			return {
@@ -79,6 +82,8 @@ export function configOf(draft) {
 		showDockChip: draft.showDockChip,
 		showTurnChip: draft.showTurnChip,
 		showSidebarCost: draft.showSidebarCost,
+		autoRefreshCost: draft.autoRefreshCost !== false,
+		autoRefreshMinutes: normalizeRefreshMinutes(draft.autoRefreshMinutes),
 		pricing,
 	};
 }

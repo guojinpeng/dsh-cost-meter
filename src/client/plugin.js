@@ -8,6 +8,7 @@ import { createCostChips } from './cost-chips.js';
 import { createUseConfigController } from './config-controller.js';
 import { createConfigPage } from './config-page.js';
 import { createCostOverviewPage } from './cost-overview.js';
+import { createOverviewPrefetcher } from './overview-prefetch.js';
 
 // React comes from the DSH module loader so every component uses the host runtime.
 export function createClientPlugin(react, reactDom, ui) {
@@ -76,6 +77,15 @@ export function createClientPlugin(react, reactDom, ui) {
 			}
 		}
 		ctx.effect(() => ctx.locale.register(NS, { zh, en }), `guojinpeng/dsh-cost-meter: dictionaries`);
+		// Warm the preset-range caches while the client runs, so the cost page
+		// reads the server cache instead of folding every session on open.
+		ctx.effect(
+			() => {
+				const prefetcher = createOverviewPrefetcher(store);
+				return () => prefetcher.dispose();
+			},
+			`guojinpeng/dsh-cost-meter: cost overview prefetch`,
+		);
 		ctx.slots.inject(`conversation.composer.dock`, () =>
 			ctx.slots.register(
 				{

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CACHE_TTL_MS, createOverviewCache } from '../src/server/overview-cache.js';
 
-test('the overview cache keeps one file per range within the five minute window', () => {
+test('the overview cache keeps one file per range within the fifteen minute window', () => {
+	assert.equal(CACHE_TTL_MS, 15 * 60 * 1000);
 	const dir = mkdtempSync(join(tmpdir(), 'gdcc-cache-'));
 	const now = Date.now();
 	const cache = createOverviewCache(dir, { now: () => now });

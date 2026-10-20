@@ -1,8 +1,9 @@
-import { HTTP_BASE } from '../identity.js';
 import { formatMoney, formatExactTokens } from './format.js';
+import { OVERVIEW_RANGES, fetchOverview } from './overview-request.js';
+import { normalizeRefreshMinutes } from '../refresh.js';
 
 /** Selectable ranges, in display order. */
-const RANGES = ['today', '7', '30', '90', 'all'];
+const RANGES = OVERVIEW_RANGES;
 /** Token series, darkest first. */
 const SERIES = [
 	{ key: 'input', labelKey: 'input' },
@@ -86,20 +87,14 @@ export function createCostOverviewPage(react, store) {
 			// A half-filled or inverted date range waits for a valid pair.
 			if (customActive && !customReady) return undefined;
 			let alive = true;
-			// A manual refresh bypasses the five minute server cache once.
+			// A manual refresh bypasses the fifteen minute server cache once.
 			const wantRefresh = force;
 			if (force) setForce(false);
 			setState((current) => ({ ...current, status: 'loading', error: null }));
-			const query = customActive
-				? 'start=' + custom.start + '&end=' + custom.end
-				: 'days=' + (range === '' ? '30' : range);
-			const suffix = wantRefresh && !customActive ? '&refresh=1' : '';
-			fetch(HTTP_BASE + '/overview?' + query + suffix)
-				.then(async (response) => {
-					const payload = await response.json();
-					if (!response.ok) throw new Error(payload?.error ?? 'HTTP ' + response.status);
-					return payload;
-				})
+			fetchOverview(range === '' ? '30' : range, {
+				refresh: wantRefresh,
+				...(customActive ? { start: custom.start, end: custom.end } : {}),
+			})
 				.then((payload) => {
 					if (alive) setState({ status: 'ready', data: payload, error: null });
 				})
@@ -125,17 +120,12 @@ export function createCostOverviewPage(react, store) {
 		// A failed refresh keeps the previous payload and still reports the error.
 		const failed = state.status === 'error';
 
-		const cachedBadge =
-			data?.cached === true
-				? h('div', { key: 'cache', className: 'gdcc_ovCache' }, [
-						h('span', { key: 'dot', className: 'gdcc_ovCacheDot' }),
-						h('span', { key: 'label', className: 'gdcc_ovCacheLabel' }, t('costPageCached')),
-						h('div', { key: 'card', className: 'gdcc_ovCacheCard', role: 'tooltip' }, [
-							h('strong', { key: 'title', className: 'gdcc_ovCacheCardTitle' }, t('costPageCachedTitle')),
-							h('p', { key: 'text', className: 'gdcc_ovCacheText' }, t('costPageCachedHint')),
-						]),
-					])
-				: null;
+		// The hint carries the cache state and the automatic refresh cadence.
+		const cacheConfig = snapshot?.config ?? {};
+		const cacheNote =
+			cacheConfig.autoRefreshCost !== false
+				? t('costPageAutoRefresh', { minutes: normalizeRefreshMinutes(cacheConfig.autoRefreshMinutes) })
+				: t('costPageCacheTtl');
 		const settings =
 			typeof openSettings === 'function'
 				? h(
@@ -156,7 +146,6 @@ export function createCostOverviewPage(react, store) {
 				h('p', { key: 'intro', className: 'gdcc_ovIntro' }, t('costPageIntro')),
 			]),
 			h('div', { key: 'actions', className: 'gdcc_ovHeadActions' }, [
-				cachedBadge,
 				settings,
 				h(
 					'button',
@@ -231,7 +220,10 @@ export function createCostOverviewPage(react, store) {
 					? t('costPageDateHint')
 					: data === null
 						? t('costPageRangeHint')
-						: t('costPageMeta', { time: beijingTime(data.generatedAt, true) }),
+						: t(data.cached === true ? 'costPageMetaCached' : 'costPageMeta', {
+								time: beijingTime(data.generatedAt, true),
+								note: cacheNote,
+							}),
 			),
 		]);
 		const body = [];

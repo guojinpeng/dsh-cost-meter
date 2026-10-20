@@ -17,12 +17,13 @@
 | `server/session-log.js` | Session log discovery, shared folds, titles and folded-state disk cache / 会话日志发现、共享折叠、标题读取和折叠状态磁盘缓存 |
 | `server/overview.js` | Overview route, range validation, calendar loading and cache stamp / 费用统计路由、范围校验、日历加载和缓存戳 |
 | `server/overview-data.js` | Overview KPIs, trend, mix, model rows and top sessions / 总览 KPI、趋势、构成、模型行和高费用会话 |
-| `server/overview-cache.js` | Five-minute preset-range result cache / 预设范围的 5 分钟结果缓存 |
+| `server/overview-cache.js` | Fifteen-minute preset-range result cache / 预设范围的 15 分钟结果缓存 |
 | `server/config-handler.js` | Authentication, HTTP bodies, revisions, save and price sync / HTTP 认证、请求体、revision、保存和价格同步 |
 | `server/holiday-store.js` | Annual holiday-cn downloads and local date caches / holiday-cn 年度下载、日期缓存和并发请求合并 |
 | `server/price-service.js` | Selected price source and independent catalog services / 所选价格来源及独立缓存服务装配 |
 | `price-sources/` | Source adapters, catalog caching, model matching and shared sync / 来源适配、目录缓存、模型匹配和共享同步 |
 | `price-sources.js` | Client-safe source IDs and legacy default / 前后端共用来源标识及旧配置默认值 |
+| `refresh.js` | Refresh interval list, default and normalization shared by server and client / 前后端共用的刷新间隔列表、默认值和归一化 |
 | `time-of-use.js` | Beijing clock windows, peak-rule lookup and provider eligibility / 北京时段分桶、峰谷规则查找及提供方判断，纯函数 |
 | `peak-rules/` | One peak rule per file: DeepSeek, Alibaba Cloud, Zhipu GLM / 每个峰谷规则一个文件 |
 
@@ -47,6 +48,8 @@ Folded session states are cached under `data/cache/sessions/<session-id>.json`. 
 | `client/pricing-table.js` | Provider/model price rows with per-model peak rules / 按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
 | `client/cost-overview.js` | Overview page: charts, model table, range controls and error banner / 费用统计页面：图表、模型表、范围控件和错误提示 |
+| `client/overview-request.js` | Preset range list and one overview request with cache bypass / 预设范围列表及单次费用统计请求（可跳过缓存） |
+| `client/overview-prefetch.js` | Timer that warms all five preset ranges and follows the setting / 按设置定时并行预热五个预设范围 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
 | `client/icons.js` | Price tag glyph shared by both chips and both panel titles / 会话胶囊、本轮胶囊和两个面板标题共用的价格标签图标 |
 | `client/format.js`, `client/locales.js` | Display formatting and bilingual text / 显示格式与中英文词典 |

@@ -58,6 +58,8 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 		showDockChip,
 		showTurnChip,
 		showSidebarCost,
+		autoRefreshCost,
+		autoRefreshMinutes,
 		pricing,
 	}) => ({
 		currency,
@@ -66,6 +68,8 @@ export function createConfigStore(fetcher = (...args) => fetch(...args)) {
 		showDockChip,
 		showTurnChip,
 		showSidebarCost,
+		autoRefreshCost,
+		autoRefreshMinutes,
 		pricing,
 	});
 	const merge = (config, changes) => ({

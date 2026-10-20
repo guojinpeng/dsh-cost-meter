@@ -84,6 +84,36 @@ test('a custom range is never cached and an inverted range is rejected', async (
 	const badRange = await call('/overview?days=1');
 	assert.equal(badRange.status, 400);
 });
+test('concurrent forced loads of all five ranges fold the sessions once', async () => {
+	const dir = mkdtempSync(join(tmpdir(), 'gdcc-handler-'));
+	let folds = 0;
+	const logs = {
+		locate: () => new Map([['s1', { path: 'session.v1.jsonl.zstd', zstd: true }]]),
+		stampOf: () => 'stamp',
+		foldCached: async () => {
+			folds++;
+			await wait(10);
+			return { states: { cost: { byTime: {}, skippedTurns: 0 } }, title: undefined };
+		},
+		titleOf: async () => undefined,
+	};
+	const connection = { requestRejection: () => undefined };
+	const sessionQuery = { listSessions: async () => [{ header: { id: 's1' }, persisted: true }] };
+	const handler = createOverviewHandler(connection, sessionQuery, undefined, () => undefined, logs, createOverviewCache(dir));
+	const call = async (url) => {
+		let head = null;
+		let body = '';
+		const res = { writeHead: (status) => (head = { status }), end: (text) => (body = text) };
+		await handler({ url, method: 'GET', headers: {} }, res);
+		return { status: head.status, body: JSON.parse(body) };
+	};
+	const results = await Promise.all(
+		['today', '7', '30', '90', 'all'].map((range) => call('/overview?days=' + range + '&refresh=1')),
+	);
+	for (const result of results) assert.equal(result.status, 200);
+	assert.equal(folds, 1, 'one fold pass serves every range');
+});
+
 test('a persisted session is counted from the shared cost state', async () => {
 	const dir = mkdtempSync(join(tmpdir(), 'gdcc-handler-'));
 	const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);

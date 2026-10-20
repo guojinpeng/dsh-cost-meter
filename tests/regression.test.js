@@ -74,6 +74,8 @@ test('existing config is read without rewriting and appended model settings surv
 		showDockChip: true,
 		showTurnChip: true,
 		showSidebarCost: true,
+		autoRefreshCost: true,
+		autoRefreshMinutes: 5,
 		pricing: { [key]: rate(2) },
 	};
 	configStore.writeConfig(original);

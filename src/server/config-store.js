@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { normalizeRate } from '../pricing.js';
 import { PRICE_SOURCES, DEFAULT_PRICE_SOURCE } from '../price-sources.js';
+import { normalizeRefreshMinutes } from '../refresh.js';
 
 const STAT_INTERVAL_MS = 1000;
 
@@ -57,6 +58,8 @@ function normalizeConfig(raw) {
 		showDockChip: source.showDockChip !== false,
 		showTurnChip: source.showTurnChip !== false,
 		showSidebarCost: source.showSidebarCost !== false,
+		autoRefreshCost: source.autoRefreshCost !== false,
+		autoRefreshMinutes: normalizeRefreshMinutes(source.autoRefreshMinutes),
 		pricing,
 	};
 }

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 
 /** Cached overview payloads older than this are recomputed. */
-export const CACHE_TTL_MS = 5 * 60 * 1000;
+export const CACHE_TTL_MS = 15 * 60 * 1000;
 
 /** Cache file name: the range name plus this suffix, for example 30-day-statistics.json. */
 export const CACHE_FILE_SUFFIX = 'day-statistics.json';

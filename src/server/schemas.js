@@ -159,6 +159,8 @@ export const configInputSchema = z
 		showDockChip: z.boolean(),
 		showTurnChip: z.boolean(),
 		showSidebarCost: z.boolean().optional(),
+		autoRefreshCost: z.boolean().optional(),
+		autoRefreshMinutes: z.number().optional(),
 		pricing: z.record(z.string(), rateSchema),
 	})
 	.strict();

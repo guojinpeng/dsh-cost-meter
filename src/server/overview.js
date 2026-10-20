@@ -199,6 +199,8 @@ async function ensureCalendars(holidays, entries, bounds) {
 /** Serve the aggregated cost overview of every session. */
 export function createOverviewHandler(connection, sessionQuery, holidays, liveStateOf, sessionLogs, overviewCache) {
 	const cache = new Map();
+	// The prefetcher sends five forced loads together; they share one fold pass.
+	let loading = null;
 	const logs =
 		sessionLogs ??
 		createSessionLogs({
@@ -254,7 +256,11 @@ export function createOverviewHandler(connection, sessionQuery, holidays, liveSt
 				}
 			}
 			const definition = createCostUsageProjection(() => config, holidays);
-			const { entries, titles } = await statesOf(sessionQuery, definition, { cache, liveStateOf, logs });
+			if (loading === null)
+				loading = statesOf(sessionQuery, definition, { cache, liveStateOf, logs }).finally(() => {
+					loading = null;
+				});
+			const { entries, titles } = await loading;
 			const now = Date.now();
 			const bounds = rangeBounds(range, { start, end }, now);
 			const calendars = await ensureCalendars(holidays, entries, bounds);
