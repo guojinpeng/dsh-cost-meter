@@ -242,6 +242,19 @@ test('the overview payload reports counts, granularity, and titles', () => {
 	assert.equal(all.days, 2);
 	assert.equal(all.sessions.length, 2);
 	assert.equal(all.sessions[0].title, null);
+	// The handler ranks the sessions once and passes the rows in.
+	const supplied = buildOverview({
+		entries,
+		config,
+		range: '30',
+		now: Date.parse('2026-10-19T05:00:00Z'),
+		rows: [{ id: 'b', title: null }],
+	});
+	assert.equal(supplied.counts.activeSessions, 1);
+	assert.deepEqual(
+		supplied.sessions.map((row) => row.id),
+		['b'],
+	);
 
 	const manyDays = {};
 	for (let index = 0; index < 61; index += 1) manyDays[shiftDate('2026-09-01', index) + '/am'] = bucket(100);

@@ -107,14 +107,19 @@ export function createHistoryModels(
 							});
 							const discovered = new Set();
 							const definition = {
-								init: () => null,
-								apply: (_state, event) => {
+								init: () => ({ routes: [], years: [] }),
+								apply: (state, event) => {
 									if (Number.isFinite(event?.time))
-										years.add(new Date(event.time + 8 * 3600000).getUTCFullYear());
+										state.years.push(new Date(event.time + 8 * 3600000).getUTCFullYear());
 									const route = routeFromEvent(event);
-									if (route) discovered.add(route);
-									return null;
+									if (route) state.routes.push(route);
+									return state;
 								},
+								stateVersion: 1,
+							};
+							const collect = (state) => {
+								for (const year of state.years) years.add(year);
+								for (const route of state.routes) discovered.add(route);
 							};
 							// Decode the log files first: the host replay is much slower. A
 							// session without a readable log file still goes through the host.
@@ -123,9 +128,23 @@ export function createHistoryModels(
 								const id = row?.header?.id;
 								if (typeof id !== 'string') continue;
 								const location = locations.get(id);
-								if (location !== undefined && sessionLogs.fold(location, definition) !== null) continue;
+								if (location !== undefined && sessionLogs) {
+									const folded = await sessionLogs.foldCached(
+										id,
+										location,
+										sessionLogs.stampOf?.(location) ?? null,
+										definition,
+										'history',
+									);
+									if (folded !== null) {
+										collect(folded.state);
+										continue;
+									}
+								}
 								const log = await sessionQuery.readSession(id).catch(() => null);
-								for (const event of log?.events ?? []) definition.apply(null, event);
+								const state = definition.init();
+								for (const event of log?.events ?? []) definition.apply(state, event);
+								collect(state);
 							}
 							for (const route of discovered) models.add(route);
 							ready = true;

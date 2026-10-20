@@ -45,6 +45,12 @@ function beijingTime(value, withTime = false) {
 }
 
 const share = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
+/** Move one open tooltip without a React render. */
+function placeTip(node, left, top) {
+	if (node === null) return;
+	node.style.left = left + 'px';
+	node.style.top = top + 'px';
+}
 const percent = (value) => value.toFixed(1) + '%';
 
 /** Calendar date in YYYY-MM-DD form, as a date input reports it. */
@@ -63,8 +69,12 @@ export function createCostOverviewPage(react, store) {
 		const [nonce, setNonce] = react.useState(0);
 		const [custom, setCustom] = react.useState({ start: '', end: '' });
 		const [force, setForce] = react.useState(false);
+		// Only the hovered index is state. A pointer move writes the tooltip
+		// position straight to the DOM, so it re-renders nothing.
 		const [hover, setHover] = react.useState(null);
 		const [timeHover, setTimeHover] = react.useState(null);
+		const trendTipRef = react.useRef(null);
+		const timeTipRef = react.useRef(null);
 
 		react.useEffect(() => {
 			if (store.getSnapshot() === null) store.load().catch(() => {});
@@ -338,7 +348,7 @@ export function createCostOverviewPage(react, store) {
 				unit.merged > 1
 					? t('trendRange', { from: unit.fromKey, to: unit.toKey })
 					: unit.fromKey;
-			const tip = hover !== null && hover.index < units.length ? hover : null;
+			const tipIndex = hover !== null && hover < units.length ? hover : null;
 			const format = (value) => (metric === 'money' ? money(value) : compactTokens(value));
 			const columnLabel = (value) =>
 				metric === 'money' ? shortMoneyText(money(value), thin) : compactTokens(value);
@@ -348,7 +358,7 @@ export function createCostOverviewPage(react, store) {
 					{
 						key: unit.key,
 						className: 'gdcc_ovBarColumn',
-						onMouseEnter: () => setHover({ index, left: 0, top: 0 }),
+						onMouseEnter: () => setHover(index),
 					},
 					[
 						// The total sits on the top of its own column, so the labels
@@ -382,31 +392,35 @@ export function createCostOverviewPage(react, store) {
 				),
 			);
 			const tipNode =
-				tip === null || units[tip.index] === undefined
+				tipIndex === null || units[tipIndex] === undefined
 					? null
-					: h('div', { key: 'tip', className: 'gdcc_ovTip', style: { left: tip.left + 'px', top: tip.top + 'px' } }, [
-							h('div', { key: 'date', className: 'gdcc_ovTipHead' }, tipLabel(units[tip.index])),
-							...SERIES.map((series) =>
-								h('div', { key: series.key, className: 'gdcc_ovTipRow' }, [
-									h('i', { key: 'dot', className: 'gdcc_ovDot gdcc_ovBarSeg--' + series.key }),
-									h('span', { key: 'label', className: 'gdcc_ovTipLabel' }, t(series.labelKey)),
-									h(
-										'span',
-										{ key: 'value', className: 'gdcc_ovTipValue' },
-										format(values[tip.index][series.key]),
-									),
-									h(
-										'span',
-										{ key: 'share', className: 'gdcc_ovTipShare' },
-										percent(share(values[tip.index][series.key], totals[tip.index])),
-									),
+					: h(
+							'div',
+							{ key: 'tip', className: 'gdcc_ovTip', ref: trendTipRef, style: { left: '0px', top: '0px' } },
+							[
+								h('div', { key: 'date', className: 'gdcc_ovTipHead' }, tipLabel(units[tipIndex])),
+								...SERIES.map((series) =>
+									h('div', { key: series.key, className: 'gdcc_ovTipRow' }, [
+										h('i', { key: 'dot', className: 'gdcc_ovDot gdcc_ovBarSeg--' + series.key }),
+										h('span', { key: 'label', className: 'gdcc_ovTipLabel' }, t(series.labelKey)),
+										h(
+											'span',
+											{ key: 'value', className: 'gdcc_ovTipValue' },
+											format(values[tipIndex][series.key]),
+										),
+										h(
+											'span',
+											{ key: 'share', className: 'gdcc_ovTipShare' },
+											percent(share(values[tipIndex][series.key], totals[tipIndex])),
+										),
+									]),
+								),
+								h('div', { key: 'total', className: 'gdcc_ovTipTotal' }, [
+									h('span', { key: 'label' }, t('totalLabel')),
+									h('strong', { key: 'value' }, format(totals[tipIndex])),
 								]),
-							),
-							h('div', { key: 'total', className: 'gdcc_ovTipTotal' }, [
-								h('span', { key: 'label' }, t('totalLabel')),
-								h('strong', { key: 'value' }, format(totals[tip.index])),
-							]),
-						]);
+							],
+						);
 			return h('section', { key: 'trend', className: 'gdcc_ovCard' }, [
 				h('div', { key: 'head', className: 'gdcc_ovCardHead' }, [
 					h('div', { key: 'titles', className: 'gdcc_ovCardTitles' }, [
@@ -455,7 +469,7 @@ export function createCostOverviewPage(react, store) {
 								const box = event.currentTarget.getBoundingClientRect();
 								const left = Math.max(0, Math.min(event.clientX - box.left + 14, box.width - 208));
 								const top = Math.max(0, Math.min(event.clientY - box.top + 14, box.height - 8));
-								setHover((current) => (current === null ? current : { index: current.index, left, top }));
+								placeTip(trendTipRef.current, left, top);
 							},
 						},
 						[...bars, tipNode],
@@ -543,7 +557,7 @@ export function createCostOverviewPage(react, store) {
 			// cost, not of the largest row.
 			const rows = data.timeOfDay;
 			const segmentLabel = (segment) => t('segment' + segment[0].toUpperCase() + segment.slice(1));
-			const hovered = timeHover !== null && rows[timeHover.index] !== undefined ? rows[timeHover.index] : null;
+			const hovered = timeHover !== null && rows[timeHover] !== undefined ? rows[timeHover] : null;
 			const tip =
 				hovered === null
 					? null
@@ -552,7 +566,8 @@ export function createCostOverviewPage(react, store) {
 							{
 								key: 'tip',
 								className: 'gdcc_ovTip gdcc_ovTimeTip',
-								style: { left: timeHover.left + 'px', top: timeHover.top + 'px' },
+								ref: timeTipRef,
+								style: { left: '0px', top: '0px' },
 							},
 							[
 								h('div', { key: 'head', className: 'gdcc_ovTipHead' }, segmentLabel(hovered.segment)),
@@ -593,7 +608,7 @@ export function createCostOverviewPage(react, store) {
 							const box = event.currentTarget.getBoundingClientRect();
 							const left = Math.max(0, Math.min(event.clientX - box.left + 14, box.width - 208));
 							const top = Math.max(0, Math.min(event.clientY - box.top + 14, box.height - 8));
-							setTimeHover((current) => (current === null ? current : { index: current.index, left, top }));
+							placeTip(timeTipRef.current, left, top);
 						},
 					},
 					[
@@ -603,7 +618,7 @@ export function createCostOverviewPage(react, store) {
 								{
 									key: row.segment,
 									className: 'gdcc_ovTimeRow',
-									onMouseEnter: () => setTimeHover({ index, left: 0, top: 0 }),
+									onMouseEnter: () => setTimeHover(index),
 								},
 								[
 									h('span', { key: 'label', className: 'gdcc_ovTimeLabel' }, segmentLabel(row.segment)),

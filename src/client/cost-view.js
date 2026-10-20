@@ -1,6 +1,19 @@
 import { buildCostView } from '../pricing.js';
 import { PROJECTION_KEY } from '../identity.js';
 
+/**
+ * One priced view per projection, configuration and calendar object. Every chip
+ * on screen shares the same projection, so the pricing runs once per change.
+ */
+const priced = new WeakMap();
+function priceOf(accounting, config, calendars) {
+	const cached = priced.get(accounting);
+	if (cached !== undefined && cached.config === config && cached.calendars === calendars) return cached.view;
+	const view = buildCostView({ ...accounting, calendars }, config);
+	priced.set(accounting, { config, calendars, view });
+	return view;
+}
+
 export function createUseCostView(react, store) {
 	function useCostView(props) {
 		const raw = props.useProjection(PROJECTION_KEY);
@@ -22,10 +35,7 @@ export function createUseCostView(react, store) {
 		return react.useMemo(() => {
 			const view =
 				raw?.accounting && snapshot
-					? buildCostView(
-							{ ...raw.accounting, calendars: snapshot.calendars ?? raw.accounting.calendars },
-							snapshot.config,
-						)
+					? priceOf(raw.accounting, snapshot.config, snapshot.calendars ?? raw.accounting.calendars)
 					: raw;
 			return missing && loadStatus !== 'error' ? { ...view, initializing: true } : view;
 		}, [raw, snapshot, missing, loadStatus]);

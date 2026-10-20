@@ -39,6 +39,7 @@ export function apply(ctx) {
 		// every event through the host query service.
 		let warnedLog = false;
 		const sessionLogs = createSessionLogs({
+			cacheDir: join(dirname(CONFIG_PATH), 'data', 'cache', 'sessions'),
 			onError: (error) => {
 				if (warnedLog) return;
 				warnedLog = true;
@@ -59,7 +60,14 @@ export function apply(ctx) {
 		queryCtx.on('session/event', (_session, event) => {
 			history.observe(event).catch((error) => ctx.logger?.warn('Could not persist historical model', error));
 		});
-		history.config().catch((error) => ctx.logger?.warn('Could not discover historical models', error));
+		history
+			.config()
+			.catch((error) => ctx.logger?.warn('Could not discover historical models', error))
+			// Warm every calendar found in history off the request path: the
+			// overview page otherwise waits for a network fetch of a missing year.
+			.then(() => {
+				for (const year of history.years()) holidays.ensure(year).catch(() => {});
+			});
 		queryCtx.inject(['webServer', 'connection'], (webCtx) => {
 			const handler = createConfigHandler(webCtx.connection, history, prices, holidays);
 			for (const path of [CONFIG_ROUTE, `${HTTP_BASE}/pricing/sync`]) {

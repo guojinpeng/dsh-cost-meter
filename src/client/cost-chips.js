@@ -168,23 +168,8 @@ export function createCostChips(react, useCostView, dialogs) {
 		return items;
 	}
 
-	/**
-	 * Bottom status-bar chip: session-level spend.
-	 *
-	 * The panel prices the four token buckets per window group (peak,
-	 * off-peak, fixed) and per model; token counts stay with the official
-	 * usage pill.
-	 */
-	function CostDockChip(props) {
-		const view = useCostView(props);
-		const dialog = useCostDialog();
-		const t = props.t;
-		if (view === undefined || view === null || view.showDock === false) return null;
-		if (view.initializing) return h(InitializingChip, { t });
-		const amount = view.amounts
-			? formatAmounts(view.amounts, true, view.currency)
-			: formatChipMoney(view.totalMicros, view.currency, view.cnyPerUsd);
-		const label = t('costValue', { amount });
+	/** Panel rows of the session chip. Built only while its dialog is open. */
+	function dockChildren(view, t) {
 		const amounts = view.amounts ?? [];
 		const routes = view.routes ?? [];
 		const children = [];
@@ -210,6 +195,26 @@ export function createCostChips(react, useCostView, dialogs) {
 		const foot = footItems(view, t);
 		if (foot.length > 0) children.push(details(foot, 'foot'));
 		children.push(h('div', { className: 'gdcc_note', key: 'note' }, t('note')));
+		return children;
+	}
+
+	/**
+	 * Bottom status-bar chip: session-level spend.
+	 *
+	 * The panel prices the four token buckets per window group (peak,
+	 * off-peak, fixed) and per model; token counts stay with the official
+	 * usage pill.
+	 */
+	function CostDockChip(props) {
+		const view = useCostView(props);
+		const dialog = useCostDialog();
+		const t = props.t;
+		if (view === undefined || view === null || view.showDock === false) return null;
+		if (view.initializing) return h(InitializingChip, { t });
+		const amount = view.amounts
+			? formatAmounts(view.amounts, true, view.currency)
+			: formatChipMoney(view.totalMicros, view.currency, view.cnyPerUsd);
+		const label = t('costValue', { amount });
 		return h('span', { className: 'gdcc_dockRoot', ref: dialog.rootRef }, [
 			h(
 				'button',
@@ -235,7 +240,7 @@ export function createCostChips(react, useCostView, dialogs) {
 							? formatAmounts(view.amounts, false, view.currency)
 							: formatMoney(view.totalMicros, view.currency, view.cnyPerUsd),
 						icon: CostIcon,
-						children,
+						children: dockChildren(view, t),
 					})
 				: null,
 		]);
@@ -260,6 +265,19 @@ export function createCostChips(react, useCostView, dialogs) {
 		return turn === undefined ? null : h(CostTurnChip, { ...props, turn });
 	}
 
+	/** Panel rows of the turn chip. Built only while its dialog is open. */
+	function turnChildren(entry, t) {
+		const routes = entry.routes ?? [];
+		const children = [];
+		for (const [index, route] of routes.entries()) {
+			if (index > 0) children.push(h('div', { className: 'gdcc_divider', key: 'divider-' + index }));
+			children.push(routeBlock(route, t, true));
+		}
+		const foot = footItems(entry, t);
+		if (foot.length > 0) children.push(details(foot, 'foot'));
+		return children;
+	}
+
 	function CostTurnChip(props) {
 		const view = useCostView(props);
 		const dialog = useCostDialog();
@@ -279,14 +297,6 @@ export function createCostChips(react, useCostView, dialogs) {
 				? formatAmounts(entry.amounts, true, view.currency)
 				: formatChipMoney(entry.micros, view.currency, view.cnyPerUsd)
 			: t('noPricing');
-		const routes = entry.routes ?? [];
-		const children = [];
-		for (const [index, route] of routes.entries()) {
-			if (index > 0) children.push(h('div', { className: 'gdcc_divider', key: 'divider-' + index }));
-			children.push(routeBlock(route, t, true));
-		}
-		const foot = footItems(entry, t);
-		if (foot.length > 0) children.push(details(foot, 'foot'));
 		return h('span', { className: 'gdcc_turnRoot', ref: dialog.rootRef }, [
 			h(
 				'button',
@@ -312,7 +322,7 @@ export function createCostChips(react, useCostView, dialogs) {
 							? formatAmounts(entry.amounts, false, view.currency)
 							: formatMoney(entry.micros, view.currency, view.cnyPerUsd),
 						icon: CostIcon,
-						children,
+						children: turnChildren(entry, t),
 					})
 				: null,
 		]);

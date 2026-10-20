@@ -69,7 +69,7 @@ async function statesOf(sessionQuery, definition, { cache, liveStateOf, logs }) 
 		}
 		let entry = null;
 		if (location !== undefined) {
-			const folded = logs.fold(location, definition);
+			const folded = await logs.foldCached(header.id, location, stamp, definition, 'cost');
 			if (folded !== null) entry = { stamp, state: folded.state, title: folded.title };
 		}
 		if (entry === null) {
@@ -106,7 +106,7 @@ async function fillTitles(sessionQuery, rows, titles, logs) {
 	for (const row of rows) {
 		if (titles.has(row.id)) continue;
 		const location = locations.get(row.id);
-		const title = location === undefined ? undefined : logs.titleOf(location);
+		const title = location === undefined ? undefined : await logs.titleOf(location);
 		if (typeof title === 'string') titles.set(row.id, title);
 		else remaining.push(row.id);
 	}
@@ -131,7 +131,7 @@ function displayCurrency(config, view) {
 }
 
 /** Build the whole overview payload from the selected session states. */
-export function buildOverview({ entries, config, range, start = null, end = null, now = Date.now(), titles = new Map(), calendars = {} }) {
+export function buildOverview({ entries, config, range, start = null, end = null, now = Date.now(), titles = new Map(), calendars = {}, rows: givenRows }) {
 	const bounds = rangeBounds(range, { start, end }, now);
 	const accounting = totalsOf(entries.reduce((sum, entry) => addRangeState(sum, entry.state, bounds.start, bounds.end), emptyAccounting(calendars)));
 	const view = buildCostView(accounting, config);
@@ -140,7 +140,7 @@ export function buildOverview({ entries, config, range, start = null, end = null
 		for (const key of Object.keys(buckets)) if (key !== 'unknown') dates.add(key.slice(0, 10));
 	const granularity = range === 'all' && dates.size > MONTH_THRESHOLD_DAYS ? 'month' : 'day';
 	const trend = mergeTrend(buildTrend(accounting, config, granularity));
-	const allRows = sessionRows(entries, config, bounds.start, bounds.end, calendars);
+	const allRows = givenRows ?? sessionRows(entries, config, bounds.start, bounds.end, calendars);
 	const rows = allRows.slice(0, TOP_SESSIONS);
 	return {
 		generatedAt: now,
@@ -252,8 +252,10 @@ export function createOverviewHandler(connection, sessionQuery, holidays, liveSt
 			const now = Date.now();
 			const bounds = rangeBounds(range, { start, end }, now);
 			const calendars = await ensureCalendars(holidays, entries, bounds);
-			await fillTitles(sessionQuery, sessionRows(entries, config, bounds.start, bounds.end).slice(0, TOP_SESSIONS), titles, logs);
-			const payload = buildOverview({ entries, config, range, start, end, now, titles, calendars });
+			// Rank the sessions once: the title lookup and the payload share the rows.
+			const allRows = sessionRows(entries, config, bounds.start, bounds.end, calendars);
+			await fillTitles(sessionQuery, allRows.slice(0, TOP_SESSIONS), titles, logs);
+			const payload = buildOverview({ entries, config, range, start, end, now, titles, calendars, rows: allRows });
 			if (range !== 'custom') overviewCache?.write(range, stamp, payload);
 			respond(res, 200, payload);
 		} catch (error) {

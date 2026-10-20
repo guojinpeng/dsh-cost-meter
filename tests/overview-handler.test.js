@@ -11,8 +11,8 @@ function harness(cache) {
 	const logs = {
 		locate: () => new Map(),
 		stampOf: () => null,
-		fold: () => null,
-		titleOf: () => undefined,
+		foldCached: async () => null,
+		titleOf: async () => undefined,
 	};
 	const connection = { requestRejection: () => undefined };
 	const sessionQuery = { listSessions: async () => [] };

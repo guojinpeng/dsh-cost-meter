@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
@@ -49,7 +49,7 @@ const counter = () => {
 	};
 };
 
-test('a compressed session log is located, folded and titled', () => {
+test('a compressed session log is located, folded and titled', async () => {
 	const root = makeHome();
 	const dir = makeSession(root, 'session-one', {
 		'session.v4.jsonl.zstd': Buffer.concat([
@@ -62,25 +62,25 @@ test('a compressed session log is located, folded and titled', () => {
 	assert.equal(location.path, join(dir, 'session.v4.jsonl.zstd'));
 	assert.equal(location.zstd, true);
 	const { seen, definition } = counter();
-	const folded = logs.fold(location, definition);
+	const folded = await logs.fold(location, definition);
 	assert.deepEqual(seen, ['assistant/message', 'assistant/message', 'session/title']);
 	assert.equal(folded.title, '每日报表');
 	assert.match(logs.stampOf(location), /^\d+(\.\d+)?:\d+$/);
 });
 
-test('a truncated final frame does not hide the earlier events', () => {
+test('a truncated final frame does not hide the earlier events', async () => {
 	const root = makeHome();
 	const complete = frame([message('deepseek', 'v3.2')]);
 	const torn = frame([title('丢失的标题')]).subarray(0, 8);
 	makeSession(root, 'session-two', { 'session.v3.jsonl.zstd': Buffer.concat([complete, torn]) });
 	const logs = createSessionLogs({ root });
 	const { seen, definition } = counter();
-	const folded = logs.fold(logs.locate().get('session-two'), definition);
+	const folded = await logs.fold(logs.locate().get('session-two'), definition);
 	assert.deepEqual(seen, ['assistant/message']);
 	assert.equal(folded.title, undefined);
 });
 
-test('an uncompressed session log is read the same way', () => {
+test('an uncompressed session log is read the same way', async () => {
 	const root = makeHome();
 	const dir = makeSession(root, 'session-three', {
 		'session.v1.jsonl': Buffer.from(
@@ -92,11 +92,11 @@ test('an uncompressed session log is read the same way', () => {
 	assert.equal(location.path, join(dir, 'session.v1.jsonl'));
 	assert.equal(location.zstd, false);
 	const { seen, definition } = counter();
-	assert.equal(logs.fold(location, definition).title, '纯文本日志');
+	assert.equal((await logs.fold(location, definition)).title, '纯文本日志');
 	assert.deepEqual(seen, ['assistant/message', 'session/title']);
 });
 
-test('the newest log version is used and a corrupt log reports once', () => {
+test('the newest log version is used and a corrupt log reports once', async () => {
 	const root = makeHome();
 	makeSession(root, 'session-four', {
 		'session.v1.jsonl.zstd': frame([title('旧版本')]),
@@ -106,8 +106,8 @@ test('the newest log version is used and a corrupt log reports once', () => {
 	const errors = [];
 	const logs = createSessionLogs({ root, onError: (error) => errors.push(error) });
 	const locations = logs.locate();
-	assert.equal(logs.titleOf(locations.get('session-four')), '新版本');
-	assert.equal(logs.fold(locations.get('session-bad'), counter().definition), null);
+	assert.equal(await logs.titleOf(locations.get('session-four')), '新版本');
+	assert.equal(await logs.fold(locations.get('session-bad'), counter().definition), null);
 	assert.equal(errors.length, 1);
 });
 
@@ -135,4 +135,38 @@ test('the history scan reads log files instead of replaying them through the hos
 	const config = await history.config();
 	assert.equal(replayed, 0, 'the host replay is not used for a readable log');
 	assert.ok(Object.hasOwn(config.pricing, 'deepseek-official/deepseek-v3.2'));
+});
+
+test('a folded session is cached until its log or its definition changes', async () => {
+	const root = makeHome();
+	const dir = makeSession(root, 'session-cached', {
+		'session.v1.jsonl': Buffer.from(JSON.stringify(message('deepseek', 'v3.2')) + '\n'),
+	});
+	const cacheDir = mkdtempSync(join(tmpdir(), 'dsh-cost-cache-'));
+	const logs = createSessionLogs({ root, cacheDir });
+	const location = logs.locate().get('session-cached');
+	const stamp = logs.stampOf(location);
+	const definition = { init: () => 0, apply: (state) => state + 1, stateVersion: 1 };
+	const cacheFile = join(cacheDir, 'cost', 'session-cached.json');
+	const folded = await logs.foldCached('session-cached', location, stamp, definition, 'cost');
+	assert.deepEqual(folded, { state: 1, title: undefined });
+	assert.ok(existsSync(cacheFile));
+	// The state comes from the cache file, so the log is not read again.
+	rmSync(dir, { recursive: true });
+	assert.deepEqual(await logs.foldCached('session-cached', location, stamp, definition, 'cost'), {
+		state: 1,
+		title: undefined,
+	});
+	// A changed stamp, a changed projection definition, and a corrupt cache all
+	// fall back to a fold, which reports the missing log.
+	const errors = [];
+	const fresh = createSessionLogs({ root, cacheDir, onError: (error) => errors.push(error) });
+	assert.equal(await fresh.foldCached('session-cached', location, stamp + ':1', definition, 'cost'), null);
+	assert.equal(errors.length, 1);
+	assert.equal(
+		await fresh.foldCached('session-cached', location, stamp, { ...definition, stateVersion: 2 }, 'cost'),
+		null,
+	);
+	writeFileSync(cacheFile, '{');
+	assert.equal(await fresh.foldCached('session-cached', location, stamp, definition, 'cost'), null);
 });
