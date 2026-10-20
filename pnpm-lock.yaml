@@ -12,16 +12,16 @@ importers:
         specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)))
       '@deepseek-ai/dsh-llm':
-        specifier: '>=0.2.0-rc.1'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-session-projection':
-        specifier: '>=0.2.0-rc.1'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-session@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-scope@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))))
       '@deepseek-ai/dsh-session-query':
         specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(2bcbalup4uwrsqcwiluipgqs6a)
       '@deepseek-ai/dsh-token-meter':
-        specifier: '>=0.2.0-rc.1'
+        specifier: '>=0.2.0-rc.2'
         version: 0.2.0-rc.2(ttjg6omflnklnr7rdq4lbpdj74)
       zod:
         specifier: ^4.6.7
