@@ -1,13 +1,21 @@
 import { OVERVIEW_RANGES, fetchOverview } from './overview-request.js';
 import { normalizeRefreshMinutes } from '../refresh.js';
 
+// Call the globals through arrows. Extracting `window.setTimeout` and calling it
+// as `timers.setTimeout(...)` makes the browser throw "Illegal invocation"
+// (the receiver must be the window), which silently killed the timer in 0.4.4.
+const defaultTimers = {
+	setTimeout: (callback, delay) => setTimeout(callback, delay),
+	clearTimeout: (handle) => clearTimeout(handle),
+};
+
 /**
  * Warm the five preset-range caches on a timer so opening the cost page reads
  * the server cache immediately. The timer runs while the web client is mounted.
  * A failed batch is silent: the page keeps the previous cache.
  */
 export function createOverviewPrefetcher(store, options = {}) {
-	const { fetcher = (...args) => fetch(...args), timers = { setTimeout, clearTimeout } } = options;
+	const { fetcher = (...args) => fetch(...args), timers = defaultTimers } = options;
 	let timer = null;
 	let running = false;
 	let disposed = false;

@@ -163,3 +163,37 @@ test('dispose stops the cadence and ignores later configuration changes', async 
 	assert.equal(net.calls.length, 5);
 	assert.equal(timers.active().length, 0);
 });
+
+test('the default timer works when setTimeout cannot be called as a method', async () => {
+	// Browsers throw "Illegal invocation" when a detached window.setTimeout is
+	// called with another receiver, which is what 0.4.4 did.
+	const store = fakeStore(configSnapshot());
+	const net = fakeFetcher();
+	const registered = [];
+	const restore = [];
+	const override = (name, fake) => {
+		restore.push([name, globalThis[name]]);
+		globalThis[name] = fake;
+	};
+	override('setTimeout', function (callback, delay) {
+		if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+		const handle = { callback, delay, cleared: false };
+		registered.push(handle);
+		return handle;
+	});
+	override('clearTimeout', function (handle) {
+		if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+		handle.cleared = true;
+	});
+	try {
+		const prefetcher = createOverviewPrefetcher(store, { fetcher: net.fetcher });
+		assert.equal(registered.length, 1, 'the cadence timer is registered');
+		assert.equal(registered[0].delay, 5 * 60000);
+		prefetcher.dispose();
+		assert.equal(registered[0].cleared, true, 'dispose clears the timer');
+	} finally {
+		for (const [name, value] of restore.reverse()) globalThis[name] = value;
+	}
+	net.release();
+	await settle();
+});
