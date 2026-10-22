@@ -7,12 +7,10 @@ import {
 	addRangeState,
 	buildTimeOfDay,
 	buildTrend,
-	dayCount,
 	emptyAccounting,
 	inRange,
 	mergeTrend,
 	rangeBounds,
-	rangeDays,
 	routeRows,
 	sessionRows,
 	totalsOf,
@@ -139,8 +137,11 @@ export function buildOverview({ entries, config, range, start = null, end = null
 	const dates = new Set();
 	for (const buckets of Object.values(accounting.byTime))
 		for (const key of Object.keys(buckets)) if (key !== 'unknown') dates.add(key.slice(0, 10));
+	const daily = buildTrend(accounting, config, 'day');
+	// A day without cost does not dilute the daily average.
+	const billedDays = daily.filter((unit) => unit.totalMicros > 0).length;
 	const granularity = range === 'all' && dates.size > MONTH_THRESHOLD_DAYS ? 'month' : 'day';
-	const trend = mergeTrend(buildTrend(accounting, config, granularity));
+	const trend = mergeTrend(granularity === 'day' ? daily : buildTrend(accounting, config, 'month'));
 	const allRows = givenRows ?? sessionRows(entries, config, bounds.start, bounds.end, calendars);
 	const rows = allRows.slice(0, TOP_SESSIONS);
 	return {
@@ -150,7 +151,7 @@ export function buildOverview({ entries, config, range, start = null, end = null
 		end: bounds.end,
 		currency: displayCurrency(config, view),
 		cnyPerUsd: config.cnyPerUsd,
-		days: (range === 'custom' ? dayCount(start, end) : rangeDays(range)) ?? Math.max(dates.size, 1),
+		billedDays,
 		granularity,
 		view: {
 			totalMicros: view.totalMicros,

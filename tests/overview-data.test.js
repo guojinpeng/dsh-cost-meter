@@ -222,7 +222,7 @@ test('the overview payload reports counts, granularity, and titles', () => {
 		titles: new Map([['a', 'First session']]),
 	});
 	assert.equal(day.range, '7');
-	assert.equal(day.days, 7);
+	assert.equal(day.billedDays, 1);
 	assert.equal(day.granularity, 'day');
 	assert.equal(day.currency, 'USD');
 	assert.equal(day.cnyPerUsd, 7.2);
@@ -239,7 +239,7 @@ test('the overview payload reports counts, granularity, and titles', () => {
 	);
 	const all = buildOverview({ entries, config, range: 'all', now: Date.parse('2026-10-19T05:00:00Z') });
 	assert.equal(all.granularity, 'day');
-	assert.equal(all.days, 2);
+	assert.equal(all.billedDays, 2);
 	assert.equal(all.sessions.length, 2);
 	assert.equal(all.sessions[0].title, null);
 	// The handler ranks the sessions once and passes the rows in.
@@ -276,7 +276,7 @@ test('an empty history still answers a complete payload', () => {
 	assert.equal(payload.view.totalTokens, 0);
 	assert.equal(payload.view.totalMicros, 0);
 	assert.equal(payload.view.cacheHitPct, null);
-	assert.equal(payload.days, 30);
+	assert.equal(payload.billedDays, 0);
 	assert.deepEqual(payload.trend, []);
 	assert.equal(payload.timeOfDay.length, 7);
 	assert.deepEqual(payload.sessions, []);
@@ -305,11 +305,30 @@ test('a custom range counts only its two dates', () => {
 	assert.equal(payload.range, 'custom');
 	assert.equal(payload.start, '2026-10-02');
 	assert.equal(payload.end, '2026-10-10');
-	assert.equal(payload.days, 9);
+	assert.equal(payload.billedDays, 1);
 	assert.deepEqual(
 		payload.trend.map((unit) => unit.key),
 		['2026-10-10'],
 	);
+});
+
+test('billed days count only days that cost money', () => {
+	const byTime = {};
+	for (let index = 0; index < 14; index += 1) byTime[shiftDate('2026-09-20', index * 2) + '/am'] = bucket(1000000);
+	const entries = [
+		{
+			header: { id: 'a', createdAt: 1 },
+			state: stateOf({
+				'p/a': byTime,
+				// Tokens without a price are usage, but not a billed day.
+				'p/unpriced': { '2026-10-19/am': bucket(500000) },
+			}),
+		},
+	];
+	const payload = buildOverview({ entries, config, range: '30', now: Date.parse('2026-10-19T05:00:00Z') });
+	assert.equal(payload.billedDays, 14);
+	assert.equal(payload.days, undefined);
+	assert.ok(payload.view.totalTokens > 0);
 });
 
 test('route rows keep every model beyond the eight wire routes', () => {

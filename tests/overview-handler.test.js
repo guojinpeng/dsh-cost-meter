@@ -75,7 +75,7 @@ test('a custom range is never cached and an inverted range is rejected', async (
 	assert.equal(custom.body.range, 'custom');
 	assert.equal(custom.body.start, '2026-10-01');
 	assert.equal(custom.body.end, '2026-10-03');
-	assert.equal(custom.body.days, 3);
+	assert.equal(custom.body.billedDays, 0);
 	assert.deepEqual(readdirSync(dir), []);
 	const inverted = await call('/overview?start=2026-10-05&end=2026-10-01');
 	assert.equal(inverted.status, 400);

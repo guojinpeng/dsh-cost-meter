@@ -282,7 +282,9 @@ export function createCostOverviewPage(react, store) {
 		]);
 
 		function kpiGrid() {
-			const average = view.totalMicros / Math.max(data.days, 1);
+			// The range divides by its billed days, not by its calendar days.
+			const billedDays = data.billedDays ?? data.days;
+			const average = billedDays > 0 ? view.totalMicros / billedDays : null;
 			return h(
 				'div',
 				{ key: 'kpi', className: 'gdcc_ovKpis' },
@@ -290,7 +292,9 @@ export function createCostOverviewPage(react, store) {
 					'cost',
 					t('kpiTotalCost'),
 					money(view.totalMicros),
-					t('kpiAvgPerDay', { amount: money(average) }),
+					average === null
+						? t('kpiNoBilledDay')
+						: t('kpiAvgPerDay', { amount: money(average), days: billedDays }),
 				),
 				kpiCard(
 					'tokens',

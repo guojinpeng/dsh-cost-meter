@@ -502,12 +502,12 @@
 	/* The theme variables exist below the root element, so the series colors are
 	   declared here: a :root declaration would not resolve and the bars would be
 	   transparent. */
-	/* Four-step blue ramp: the lightest step is cache read, the darkest is
-	   cache write. These colors read on both themes. */
-	--gdcc-ov-read: #8ab8ea;
-	--gdcc-ov-input: #5b93dc;
-	--gdcc-ov-output: #2f6bc4;
-	--gdcc-ov-write: #1d4b96;
+	/* Four-step blue ramp, darkest to lightest: uncached input, output,
+	   cache read, cache write. The order matches SERIES in cost-overview.js. */
+	--gdcc-ov-input: #2971c6;
+	--gdcc-ov-output: #5297ec;
+	--gdcc-ov-read: #84baff;
+	--gdcc-ov-write: #acd4ff;
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
