@@ -33,17 +33,17 @@ const config = {
 	showDockChip: true,
 	showTurnChip: true,
 	pricing: {
-		'com-aliyun/qwen3.8-max': { currency: 'CNY', input: 14.4, output: 43.2, cacheRead: 1.8, cacheWrite: 18 },
+		'helios-ai/helios-3-pro': { currency: 'CNY', input: 14.4, output: 43.2, cacheRead: 1.8, cacheWrite: 18 },
 	},
 };
 const accounting = {
 	totals: { ...buckets },
-	byRoute: { 'com-aliyun/qwen3.8-max': buckets },
+	byRoute: { 'helios-ai/helios-3-pro': buckets },
 	turns: {
 		1: {
 			totalTokens: 71500,
 			tokens: { ...turnBuckets },
-			byRoute: { 'com-aliyun/qwen3.8-max': turnBuckets },
+			byRoute: { 'helios-ai/helios-3-pro': turnBuckets },
 			recovered: false,
 		},
 	},
@@ -51,7 +51,7 @@ const accounting = {
 };
 const mixed = process.env.SCREENSHOT_SCENARIO === 'mixed';
 if (mixed) {
-	const key = 'deepseek-official/deepseek-flash';
+	const key = 'sunset-labs/sunset-1';
 	config.pricing[key] = {
 		currency: 'USD',
 		autoOffPeak: true,
