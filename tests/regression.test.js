@@ -183,6 +183,33 @@ function project(events, config) {
 }
 const turn = (...events) => [event('turn/start'), ...events, event('turn/end')];
 
+test('an inherited seed is billed to the original session, not to the side thread', () => {
+	const config2 = { currency: 'USD', cnyPerUsd: 7.2, pricing: { 'p/a': rate(1) } };
+	const seed = turn(...step(1, 'a'));
+	assert.equal(project(seed, config2).view.totalTokens, 200);
+	const later = [
+		event('turn/start', { turn: 2 }),
+		event('step/start', { turn: 2, step: 1 }),
+		event('assistant/message', {
+			turn: 2,
+			step: 1,
+			usage,
+			message: { source: { provider: 'p', model: 'a' } },
+		}),
+		event('step/end', { turn: 2, step: 1 }),
+		event('turn/end', { turn: 2 }),
+	];
+	// A side thread logs the inherited transcript, then the marker that ends it.
+	const sideThread = project(
+		[...seed, { type: 'session/end-seed', data: { inherited: true } }, ...later],
+		config2,
+	);
+	assert.equal(sideThread.view.totalTokens, 200);
+	// A plain session keeps every turn, even after its own end-of-seed marker.
+	const plain = project([...seed, { type: 'session/end-seed', data: {} }, ...later], config2);
+	assert.equal(plain.view.totalTokens, 400);
+});
+
 test('multiple models and live prices agree for session and turn', () => {
 	const config = { currency: 'USD', cnyPerUsd: 7.2, pricing: { 'p/a': rate(1), 'p/b': rate(10) } };
 	const { projection, state, view } = project(turn(...step(1, 'a'), ...step(2, 'b')), config);

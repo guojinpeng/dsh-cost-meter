@@ -1,4 +1,5 @@
 import { formatMoney, formatExactTokens } from './format.js';
+import { logAxisMax, logTicks, modelPoints, shortModelName, trendBarRange } from './overview-charts.js';
 import { OVERVIEW_RANGES, fetchOverview } from './overview-request.js';
 import { normalizeRefreshMinutes } from '../refresh.js';
 
@@ -47,6 +48,14 @@ function beijingTime(value, withTime = false) {
 
 const share = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
 /** Move one open tooltip without a React render. */
+// Two hover lists are equal when they name the same models in the same order.
+function sameHoverRoutes(left, right) {
+	if (left === right) return true;
+	if (left === null || right === null) return false;
+	if (left.length !== right.length) return false;
+	return left.every((route, index) => route === right[index]);
+}
+
 function placeTip(node, left, top) {
 	if (node === null) return;
 	node.style.left = left + 'px';
@@ -76,6 +85,19 @@ export function createCostOverviewPage(react, store) {
 		const [timeHover, setTimeHover] = react.useState(null);
 		const trendTipRef = react.useRef(null);
 		const timeTipRef = react.useRef(null);
+		const [modelView, setModelView] = react.useState('scatter');
+		// Routes whose bubble sits under the pointer. Overlapping bubbles come in
+		// as one list, nearest first, and the tooltip lists every one of them.
+		const [modelHover, setModelHover] = react.useState(null);
+		// Models switched off in the legend. The axis keeps its span, so a click
+		// hides or shows one bubble without rescaling the chart.
+		const [hiddenModels, setHiddenModels] = react.useState([]);
+		const modelTipRef = react.useRef(null);
+		const crossLayerRef = react.useRef(null);
+		const crossVRef = react.useRef(null);
+		const crossHRef = react.useRef(null);
+		const crossXRef = react.useRef(null);
+		const crossYRef = react.useRef(null);
 
 		react.useEffect(() => {
 			if (store.getSnapshot() === null) store.load().catch(() => {});
@@ -105,10 +127,12 @@ export function createCostOverviewPage(react, store) {
 				alive = false;
 			};
 		}, [range, custom.start, custom.end, nonce]);
+		// A new range or a bar click clears every hovered highlight.
 		react.useEffect(() => {
 			setHover(null);
 			setTimeHover(null);
-		}, [range, nonce]);
+			setModelHover(null);
+		}, [range, nonce, custom.start, custom.end]);
 
 		const data = state.data;
 		const view = data?.view;
@@ -350,15 +374,25 @@ export function createCostOverviewPage(react, store) {
 				metric === 'money' ? shortMoneyText(money(value), thin) : compactTokens(value);
 			const bars = units.map((unit, index) =>
 				h(
-					'div',
+					'button',
 					{
 						key: unit.key,
+						type: 'button',
 						className: 'gdcc_ovBarColumn',
+						title: t('trendBarFilter', { label: tipLabel(unit) }),
+						'aria-label': t('trendBarFilter', { label: tipLabel(unit) }),
 						onMouseEnter: () => setHover(index),
+						// One click turns the bar into a custom range and queries it.
+						onClick: () => {
+							const span = trendBarRange(unit);
+							setRange('');
+							setCustom({ start: span.start, end: span.end });
+							setHover(null);
+						},
 					},
 					[
-						// The total sits on the top of its own column, so the labels
-						// follow the bar heights instead of sharing one baseline.
+						// The total sits on the top of its own column, so the labels follow the
+						// bar heights instead of sharing one baseline.
 						showValues
 							? h(
 									'span',
@@ -425,12 +459,12 @@ export function createCostOverviewPage(react, store) {
 							'span',
 							{ key: 'hint', className: 'gdcc_ovMuted' },
 							t(
-							units.some((unit) => unit.merged > 1)
-								? 'trendHintMerged'
-								: data.granularity === 'month'
-									? 'trendHintMonth'
-									: 'trendHintDay',
-						),
+								units.some((unit) => unit.merged > 1)
+									? 'trendHintMerged'
+									: data.granularity === 'month'
+										? 'trendHintMonth'
+										: 'trendHintDay',
+							) + t('trendClickHint'),
 						),
 					]),
 					h(
@@ -503,11 +537,11 @@ export function createCostOverviewPage(react, store) {
 				micros: view.bucketMicros[series.key] ?? 0,
 			}));
 			const total = entries.reduce((sum, entry) => sum + entry.value, 0);
-			// The ring, the trend and the time-of-day bars all show cost shares, so
-			// the ring must not switch to token shares when tokens are cheap.
 			const cost = entries.reduce((sum, entry) => sum + entry.micros, 0);
-			const unit = (entry) => (cost > 0 ? entry.micros : entry.value);
-			const whole = cost > 0 ? cost : total;
+			// Money shares fall back to token shares while no route is priced.
+			const byMoney = metric === 'money' && cost > 0;
+			const unit = (entry) => (byMoney ? entry.micros : entry.value);
+			const whole = byMoney ? cost : total;
 			let cursor = 0;
 			const stops = entries.map((entry) => {
 				const from = cursor;
@@ -517,7 +551,11 @@ export function createCostOverviewPage(react, store) {
 			return h('section', { key: 'composition', className: 'gdcc_ovCard' }, [
 				h('div', { key: 'head', className: 'gdcc_ovCardHead' }, [
 					h('h2', { key: 'title', className: 'gdcc_ovCardTitle' }, t('compositionTitle')),
-					h('span', { key: 'hint', className: 'gdcc_ovMuted' }, t('compositionHint')),
+					h(
+						'span',
+						{ key: 'hint', className: 'gdcc_ovMuted' },
+						t(metric === 'money' ? 'compositionHintCost' : 'compositionHintTokens'),
+					),
 				]),
 				h('div', { key: 'body', className: 'gdcc_ovComposition' }, [
 					h('div', {
@@ -526,9 +564,16 @@ export function createCostOverviewPage(react, store) {
 						style: { background: `conic-gradient(${stops.join(', ')})` },
 					}, [
 						h('div', { key: 'hole', className: 'gdcc_ovDonutHole' }, [
-							h('strong', { key: 'cost', className: 'gdcc_ovDonutCost' }, money(view.totalMicros)),
-							h('span', { key: 'value' }, compactTokens(total)),
-							h('span', { key: 'unit', className: 'gdcc_ovMuted' }, 'token'),
+							h(
+								'strong',
+								{ key: 'main', className: 'gdcc_ovDonutCost' },
+								metric === 'money' ? money(view.totalMicros) : compactTokens(total),
+							),
+							h(
+								'span',
+								{ key: 'sub' },
+								metric === 'money' ? compactTokens(total) + ' token' : money(view.totalMicros),
+							),
 						]),
 					]),
 					h(
@@ -549,10 +594,14 @@ export function createCostOverviewPage(react, store) {
 		}
 
 		function timeOfDayCard() {
-			// Every row fills the track: the widths are shares of that row's own
-			// cost, not of the largest row.
+			// Every row fills the track: the widths are shares of that row's own value,
+			// not of the largest row.
 			const rows = data.timeOfDay;
+			const byMoney = metric === 'money';
 			const segmentLabel = (segment) => t('segment' + segment[0].toUpperCase() + segment.slice(1));
+			const rowTotal = (row) => (byMoney ? row.totalMicros : row.totalTokens);
+			const rowValue = (row, key) => (byMoney ? (row.bucketMicros?.[key] ?? 0) : (row.tokens?.[key] ?? 0));
+			const format = (value) => (byMoney ? money(value) : compactTokens(value));
 			const hovered = timeHover !== null && rows[timeHover] !== undefined ? rows[timeHover] : null;
 			const tip =
 				hovered === null
@@ -574,25 +623,29 @@ export function createCostOverviewPage(react, store) {
 										h(
 											'span',
 											{ key: 'value', className: 'gdcc_ovTipValue' },
-											money(hovered.bucketMicros?.[series.key] ?? 0),
+											format(rowValue(hovered, series.key)),
 										),
 										h(
 											'span',
 											{ key: 'share', className: 'gdcc_ovTipShare' },
-											percent(share(hovered.bucketMicros?.[series.key] ?? 0, hovered.totalMicros)),
+											percent(share(rowValue(hovered, series.key), rowTotal(hovered))),
 										),
 									]),
 								),
 								h('div', { key: 'total', className: 'gdcc_ovTipTotal' }, [
 									h('span', { key: 'label' }, t('totalLabel')),
-									h('strong', { key: 'value' }, money(hovered.totalMicros)),
+									h('strong', { key: 'value' }, format(rowTotal(hovered))),
 								]),
 							],
 						);
 			return h('section', { key: 'time', className: 'gdcc_ovCard' }, [
 				h('div', { key: 'head', className: 'gdcc_ovCardHead' }, [
 					h('h2', { key: 'title', className: 'gdcc_ovCardTitle' }, t('timeOfDayTitle')),
-					h('span', { key: 'hint', className: 'gdcc_ovMuted' }, t('timeOfDayHint')),
+					h(
+						'span',
+						{ key: 'hint', className: 'gdcc_ovMuted' },
+						t(byMoney ? 'timeOfDayHintCost' : 'timeOfDayHintTokens'),
+					),
 				]),
 				h(
 					'div',
@@ -622,17 +675,17 @@ export function createCostOverviewPage(react, store) {
 										'span',
 										{ key: 'track', className: 'gdcc_ovTrack' },
 										SERIES.map((series) => {
-											const value = row.bucketMicros?.[series.key] ?? 0;
+											const value = rowValue(row, series.key);
 											return value > 0
 												? h('i', {
 														key: series.key,
 														className: 'gdcc_ovTrackSeg gdcc_ovBarSeg--' + series.key,
-														style: { width: share(value, row.totalMicros) + '%' },
+														style: { width: share(value, rowTotal(row)) + '%' },
 													})
 												: null;
 										}),
 									),
-									h('span', { key: 'value', className: 'gdcc_ovTimeValue' }, money(row.totalMicros)),
+									h('span', { key: 'value', className: 'gdcc_ovTimeValue' }, format(rowTotal(row))),
 								],
 							),
 						),
@@ -642,52 +695,412 @@ export function createCostOverviewPage(react, store) {
 			]);
 		}
 
+		// A function declaration, not a const: the card body is built before this
+		// point in the render, and the legend buttons close over it.
+		function toggleModel(route) {
+			setHiddenModels((current) =>
+				current.includes(route) ? current.filter((item) => item !== route) : [...current, route],
+			);
+		}
+
 		function modelsCard() {
 			const routes = (data.models ?? view.routes).filter((route) => route.totalTokens > 0);
-			const total = routes.reduce((sum, route) => sum + route.micros, 0);
+			const byMoney = metric === 'money';
+			const basis = (route) => (byMoney ? route.micros : route.totalTokens);
+			const total = routes.reduce((sum, route) => sum + basis(route), 0);
 			const unpriced = routes.some((route) => !route.priced);
+			const scatter = modelView === 'scatter';
+			const hint = unpriced
+				? t('modelsUnpriced')
+				: scatter
+					? t('scatterHint')
+					: t(byMoney ? 'modelsHintCost' : 'modelsHintTokens');
 			return h('section', { key: 'models', className: 'gdcc_ovCard' }, [
 				h('div', { key: 'head', className: 'gdcc_ovCardHead' }, [
-					h('h2', { key: 'title', className: 'gdcc_ovCardTitle' }, t('modelsTitle')),
-					unpriced
-						? h('span', { key: 'warning', className: 'gdcc_ovMuted' }, t('modelsUnpriced'))
-						: h('span', { key: 'hint', className: 'gdcc_ovMuted' }, t('modelsHintShare')),
-				]),
-				h('div', { key: 'table', className: 'gdcc_ovTable' }, [
-					h('div', { key: 'head', className: 'gdcc_ovTableHead' }, [
-						h('span', { key: 'model' }, t('modelColModel')),
-						h('span', { key: 'tokens' }, t('modelColTokens')),
-						h('span', { key: 'cost' }, t('modelColCost')),
-						h('span', { key: 'share' }, t('modelColShare')),
+					h('div', { key: 'titles', className: 'gdcc_ovCardTitles' }, [
+						h('h2', { key: 'title', className: 'gdcc_ovCardTitle' }, t('modelsTitle')),
+						h('span', { key: 'hint', className: 'gdcc_ovMuted' }, hint),
 					]),
-					...routes.map((route) => {
-						const slash = route.route.indexOf('/');
-						const provider = slash > 0 ? route.route.slice(0, slash) : '';
-						const model = slash > 0 ? route.route.slice(slash + 1) : route.route;
-						return h('div', { key: route.route, className: 'gdcc_ovTableRow' }, [
-							h('span', { key: 'model', className: 'gdcc_ovModel' }, [
-								provider ? h('small', { key: 'provider', className: 'gdcc_ovMuted' }, provider) : null,
-								h('span', { key: 'name', className: 'gdcc_ovModelName' }, model),
-							]),
-							h('span', { key: 'tokens', className: 'gdcc_ovNum' }, compactTokens(route.totalTokens)),
-							h('span', { key: 'cost', className: 'gdcc_ovNum' }, route.priced ? money(route.micros) : '—'),
+					h(
+						'div',
+						{ key: 'view', className: 'gdcc_ovSegmented' },
+						[
+							['scatter', t('modelViewScatter')],
+							['share', t('modelViewShare')],
+						].map(([id, text]) =>
+							h(
+								'button',
+								{
+									key: id,
+									type: 'button',
+									className: 'gdcc_ovSegment',
+									'aria-pressed': modelView === id,
+									onClick: () => {
+										setModelView(id);
+										setModelHover(null);
+									},
+								},
+								text,
+							),
+						),
+					),
+				]),
+				scatter ? modelsScatter(routes) : modelsTable(routes, basis, total),
+			]);
+		}
+
+		function modelsTable(routes, basis, total) {
+			return h('div', { key: 'table', className: 'gdcc_ovTable' }, [
+				h('div', { key: 'head', className: 'gdcc_ovTableHead' }, [
+					h('span', { key: 'model' }, t('modelColModel')),
+					h('span', { key: 'tokens' }, t('modelColTokens')),
+					h('span', { key: 'cost' }, t('modelColCost')),
+					h('span', { key: 'share' }, t('modelColShare')),
+				]),
+				...routes.map((route) => {
+					const slash = route.route.indexOf('/');
+					const provider = slash > 0 ? route.route.slice(0, slash) : '';
+					const model = slash > 0 ? route.route.slice(slash + 1) : route.route;
+					return h('div', { key: route.route, className: 'gdcc_ovTableRow' }, [
+						h('span', { key: 'model', className: 'gdcc_ovModel' }, [
+							provider ? h('small', { key: 'provider', className: 'gdcc_ovMuted' }, provider) : null,
+							h('span', { key: 'name', className: 'gdcc_ovModelName' }, model),
+						]),
+						h('span', { key: 'tokens', className: 'gdcc_ovNum' }, compactTokens(route.totalTokens)),
+						h('span', { key: 'cost', className: 'gdcc_ovNum' }, route.priced ? money(route.micros) : '—'),
+						h(
+							'span',
+							{ key: 'share', className: 'gdcc_ovShareCell' },
 							h(
 								'span',
-								{ key: 'share', className: 'gdcc_ovShareCell' },
+								{ key: 'track', className: 'gdcc_ovTrack' },
+								h('i', {
+									key: 'fill',
+									className: 'gdcc_ovTrackSeg gdcc_ovBarSeg--input',
+									style: { width: share(basis(route), total) + '%' },
+								}),
+							),
+							h('span', { key: 'share', className: 'gdcc_ovMuted' }, percent(share(basis(route), total))),
+						),
+					]);
+				}),
+			]);
+		}
+
+		function modelsScatter(routes) {
+			const all = modelPoints(routes);
+			if (all.length === 0)
+				return h('div', { key: 'scatter', className: 'gdcc_ovScatterEmpty' }, t('scatterEmpty'));
+			// The x axis is the total spend of one model in the display currency. It is
+			// logarithmic because model totals differ by orders of magnitude.
+			// Every name sits at the top right corner of its bubble, so the widest name
+			// needs free room at the right end of the plot.
+			const PLOT_HEIGHT = 260;
+			const INSET = 12;
+			const BUBBLE = 16;
+			const GAP = BUBBLE / 2 + 4;
+			// A bubble answers the pointer a little outside its rim, so a small dot
+			// stays easy to reach.
+			const HIT_RADIUS = BUBBLE / 2 + 5;
+			const LABEL_CHAR = 5.9;
+			const LABEL_MAX = 20;
+			// Nominal plot width used to reserve that room; the real width is fluid.
+			const LABEL_TRACK = 800;
+			const rate = currency === 'CNY' ? cnyPerUsd : 1;
+			const displayOf = (micros) => (micros / 1e6) * rate;
+			const microsOf = (value) => (value * 1e6) / rate;
+			const labelWidth = (point) => shortModelName(point.route, LABEL_MAX).length * LABEL_CHAR + 4;
+			const widestLabel = all.reduce((max, point) => Math.max(max, labelWidth(point)), 0);
+			const labelRoom = Math.min(0.35, (widestLabel + GAP + INSET) / LABEL_TRACK);
+			const spends = all.map((point) => displayOf(point.micros)).filter((value) => value > 0);
+			let spendMin = spends.length > 0 ? Math.min(...spends) : 1;
+			let spendMax = spends.length > 0 ? Math.max(...spends) : 10;
+			// One single model gets a symmetric span, so its bubble lands mid axis.
+			if (!(spendMax > spendMin * 1.01)) {
+				const middle = Math.max(spendMin, spendMax);
+				spendMin = middle / 3;
+				spendMax = middle * 3;
+			}
+			// The axis range grows until the last bubble plus its name fit on the right,
+			// so a label never has to move to the left of its bubble.
+			const logMin = Math.log10(spendMin);
+			const logSpan = (Math.log10(spendMax) - logMin) / (1 - labelRoom);
+			const axisMax = logAxisMax(Math.pow(10, logMin + logSpan));
+			const tickValues = logTicks(spendMin, axisMax);
+			// Drop a tick when its label would touch the previous one at the usual
+			// card width; two ticks a few pixels apart read as one garbled number.
+			const spacedTicks = [];
+			for (const value of tickValues) {
+				const fraction = Math.max(0, Math.min((Math.log10(value) - logMin) / logSpan, 1));
+				const last = spacedTicks[spacedTicks.length - 1];
+				// A later tick replaces a too-close earlier one, so the axis keeps its top label.
+				if (last !== undefined && fraction - last.fraction < 0.055) {
+					spacedTicks[spacedTicks.length - 1] = { value: value, fraction: fraction };
+				} else {
+					spacedTicks.push({ value: value, fraction: fraction });
+				}
+			}
+			const xTicks = spacedTicks.length > 0 ? spacedTicks.map((tick) => tick.value) : [spendMin, axisMax];
+			const maxTokens = all.reduce((max, point) => Math.max(max, point.totalTokens), 0);
+			// Round the top tick up to 1/2/5 so the four labels stay short.
+			const yMax = maxTokens > 0 ? logAxisMax(maxTokens) : 1;
+			// No mark may paint on the gutter: the axis origin starts one bubble radius
+			// inside the frame, and the pointer mapping uses the same track.
+			const round = (value) => Math.round(value * 10000) / 10000;
+			const at = (fraction) => 'calc(' + INSET + 'px + (100% - ' + 2 * INSET + 'px) * ' + round(fraction) + ')';
+			const fractionX = (point) => {
+				const value = Math.max(displayOf(point.micros), spendMin);
+				return Math.max(0, Math.min((Math.log10(value) - logMin) / logSpan, 1));
+			};
+			const fractionY = (point) => Math.max(0, Math.min(point.totalTokens / yMax, 1));
+			const tickFraction = (value) => Math.max(0, Math.min((Math.log10(value) - logMin) / logSpan, 1));
+			const spendOf = (fraction) => Math.pow(10, logMin + logSpan * fraction);
+			const yTicks = [yMax / 4, yMax / 2, (yMax * 3) / 4, yMax];
+			// Bubble depth follows the blended price: the cheapest model is palest and
+			// the dearest is deepest. Prices differ by orders of magnitude, so the ramp
+			// is normalised in log space over every model in range.
+			const priceOf = (point) => (point.totalTokens > 0 ? point.micros / point.totalTokens : 0);
+			const prices = all.map(priceOf).filter((value) => value > 0);
+			const priceLogMin = prices.length > 0 ? Math.log10(Math.min(...prices)) : 0;
+			const priceLogSpan = prices.length > 1 ? Math.log10(Math.max(...prices)) - priceLogMin : 0;
+			// Hue travels from teal (cheap) to indigo (dear) while lightness drops, so
+			// two models with close prices still differ in colour, and both ends stay
+			// readable on a light and on a dark card.
+			const shadeOf = (point) => {
+				const price = priceOf(point);
+				if (priceLogSpan <= 0 || !(price > 0)) return 'oklch(0.66 0.1 250)';
+				const ratio = Math.max(0, Math.min((Math.log10(price) - priceLogMin) / priceLogSpan, 1));
+				const lightness = (0.9 - 0.48 * ratio).toFixed(3);
+				const chroma = (0.06 + 0.12 * ratio).toFixed(3);
+				const hue = (185 + 80 * ratio).toFixed(1);
+				return 'oklch(' + lightness + ' ' + chroma + ' ' + hue + ')';
+			};
+			// Hidden models keep the axis span stable, so a click never rescales it.
+			const visible = all.filter((point) => !hiddenModels.includes(point.route));
+			const hovered =
+				modelHover === null
+					? []
+					: modelHover.map((route) => visible.find((point) => point.route === route)).filter((point) => point !== undefined);
+			// One block per hovered model, stacked top to bottom, nearest first.
+			const tipGroups = hovered.map((point) =>
+				h('div', { key: point.route, className: 'gdcc_ovTipGroup' }, [
+					h('div', { key: 'head', className: 'gdcc_ovTipHead' }, point.route),
+					...SERIES.map((series) =>
+						h('div', { key: series.key, className: 'gdcc_ovTipRow' }, [
+							h('i', { key: 'dot', className: 'gdcc_ovDot gdcc_ovBarSeg--' + series.key }),
+							h('span', { key: 'label', className: 'gdcc_ovTipLabel' }, t(series.labelKey)),
+							h('span', { key: 'value', className: 'gdcc_ovTipValue' }, money(point.bucketMicros?.[series.key] ?? 0)),
+							h(
+								'span',
+								{ key: 'tokens', className: 'gdcc_ovTipShare' },
+								compactTokens(point.tokens?.[series.key] ?? 0),
+							),
+						]),
+					),
+					h('div', { key: 'total', className: 'gdcc_ovTipTotal' }, [
+						h('span', { key: 'label' }, t('totalLabel')),
+						h('span', { key: 'value', className: 'gdcc_ovTipTotalValue' }, [
+							h('strong', { key: 'money' }, money(point.micros)),
+							h('span', { key: 'tokens', className: 'gdcc_ovMuted' }, compactTokens(point.totalTokens)),
+						]),
+					]),
+					// Average price of one million tokens: total spend divided by total tokens.
+					h('div', { key: 'avg', className: 'gdcc_ovTipAvg' }, [
+						h('span', { key: 'label' }, t('tipAverage')),
+						h(
+							'span',
+							{ key: 'value', className: 'gdcc_ovTipAvgValue' },
+							money(point.totalTokens > 0 ? (point.micros / point.totalTokens) * 1e6 : 0),
+						),
+					]),
+				]),
+			);
+			const tip =
+				tipGroups.length === 0
+					? null
+					: h('div', { key: 'tip', className: 'gdcc_ovTip', ref: modelTipRef, style: { left: '0px', top: '0px' } }, tipGroups);
+			// The guides sit under the bubbles, the readout chips ride on the axes.
+			const cross = h('div', { key: 'cross', className: 'gdcc_ovCrossLayer', ref: crossLayerRef }, [
+				h('i', { key: 'v', className: 'gdcc_ovCrossV', ref: crossVRef }),
+				h('i', { key: 'h', className: 'gdcc_ovCrossH', ref: crossHRef }),
+				h('span', { key: 'x', className: 'gdcc_ovCrossX', ref: crossXRef }),
+				h('span', { key: 'y', className: 'gdcc_ovCrossY', ref: crossYRef }),
+			]);
+			// Every name sits at the top right corner of its bubble. The axis reserves
+			// room for the widest name, so a name never leaves the plot.
+			const labelStyle = { left: GAP + 'px', bottom: BUBBLE / 2 + 2 + 'px' };
+			// One legend row per provider, each model a button that hides its bubble.
+			const groups = new Map();
+			for (const point of all) {
+				const slash = point.route.indexOf('/');
+				const provider = slash > 0 ? point.route.slice(0, slash) : '';
+				const list = groups.get(provider) ?? [];
+				list.push(point);
+				groups.set(provider, list);
+			}
+			const legend = h(
+				'div',
+				{ key: 'legend', className: 'gdcc_ovModelLegend' },
+				[...groups].map(([provider, list]) =>
+					h('div', { key: provider === '' ? 'bare' : provider, className: 'gdcc_ovModelLegendRow' }, [
+						provider === ''
+							? null
+							: h('span', { key: 'provider', className: 'gdcc_ovModelLegendProvider' }, provider),
+						...list.map((point) => {
+							const slash = point.route.indexOf('/');
+							const name = slash > 0 ? point.route.slice(slash + 1) : point.route;
+							return h(
+								'button',
+								{
+									key: point.route,
+									type: 'button',
+									className: 'gdcc_ovModelLegendItem',
+									'aria-pressed': !hiddenModels.includes(point.route),
+									title: point.route,
+									onClick: () => toggleModel(point.route),
+								},
+								name,
+							);
+						}),
+					]),
+				),
+			);
+			return h('div', { key: 'scatter', className: 'gdcc_ovScatterView' }, [
+				h('div', { key: 'chart', className: 'gdcc_ovScatter' }, [
+					h('span', { key: 'titleY', className: 'gdcc_ovScatterTitle gdcc_ovScatterTitle--y' }, t('scatterAxisY')),
+					h(
+						'div',
+						{
+							key: 'plot',
+							className: 'gdcc_ovScatterPlot',
+							style: { height: PLOT_HEIGHT + 'px' },
+							onMouseMove: (event) => {
+								const box = event.currentTarget.getBoundingClientRect();
+								const spanX = Math.max(1, box.width - 2 * INSET);
+								const spanY = Math.max(1, box.height - 2 * INSET);
+								const pointerX = Math.max(0, Math.min(event.clientX - box.left, box.width));
+								const pointerY = Math.max(0, Math.min(event.clientY - box.top, box.height));
+								// The guides follow the pointer only: they never snap to a bubble.
+								const fx = Math.max(0, Math.min((pointerX - INSET) / spanX, 1));
+								const fy = Math.max(0, Math.min((box.height - pointerY - INSET) / spanY, 1));
+								const lineX = INSET + spanX * fx;
+								const lineY = INSET + spanY * fy;
+								const layer = crossLayerRef.current;
+								if (layer !== null) layer.style.opacity = '1';
+								const vertical = crossVRef.current;
+								if (vertical !== null) vertical.style.left = lineX + 'px';
+								const horizontal = crossHRef.current;
+								if (horizontal !== null) horizontal.style.bottom = lineY + 'px';
+								const xChip = crossXRef.current;
+								if (xChip !== null) {
+									xChip.style.left = lineX + 'px';
+									xChip.textContent = money(microsOf(spendOf(fx)));
+								}
+								const yChip = crossYRef.current;
+								if (yChip !== null) {
+									yChip.style.bottom = lineY + 'px';
+									yChip.textContent = compactTokens(fy * yMax);
+								}
+								// Every bubble under the pointer is hovered, not only the topmost one:
+								// stacked bubbles report their models together, nearest first.
+								const hits = [];
+								for (const point of visible) {
+									const centerX = INSET + spanX * fractionX(point);
+									const centerY = box.height - (INSET + spanY * fractionY(point));
+									const distance = Math.hypot(pointerX - centerX, pointerY - centerY);
+									if (distance <= HIT_RADIUS) hits.push({ route: point.route, distance: distance });
+								}
+								hits.sort((left, right) => left.distance - right.distance || (left.route < right.route ? -1 : 1));
+								const routes = hits.map((hit) => hit.route);
+								const next = routes.length === 0 ? null : routes;
+								setModelHover((current) => (sameHoverRoutes(current, next) ? current : next));
+								// The tooltip stays inside the plot: below or right of the pointer by
+								// default, flipped to the other side when the frame ends first.
+								const tipNode = modelTipRef.current;
+								if (tipNode !== null) {
+									const gap = 14;
+									const tipWidth = tipNode.offsetWidth;
+									const tipHeight = tipNode.offsetHeight;
+									const rawLeft = pointerX + gap + tipWidth > box.width ? pointerX - gap - tipWidth : pointerX + gap;
+									const rawTop = pointerY + gap + tipHeight > box.height ? pointerY - gap - tipHeight : pointerY + gap;
+									const left = Math.max(0, Math.min(rawLeft, box.width - tipWidth));
+									const top = Math.max(0, Math.min(rawTop, box.height - tipHeight));
+									placeTip(tipNode, left, top);
+								}
+							},
+							onMouseLeave: () => {
+								setModelHover(null);
+								if (crossLayerRef.current !== null) crossLayerRef.current.style.opacity = '0';
+							},
+						},
+						[
+							...yTicks.map((value, index) =>
+								h('i', { key: 'grid' + index, className: 'gdcc_ovScatterGrid', style: { bottom: at(value / yMax) } }),
+							),
+							...xTicks.map((value, index) =>
+								h('i', {
+									key: 'vgrid' + index,
+									className: 'gdcc_ovScatterGrid gdcc_ovScatterGrid--v',
+									style: { left: at(tickFraction(value)) },
+								}),
+							),
+							cross,
+							...visible.map((point) => {
+								const fx = fractionX(point);
+								const fy = fractionY(point);
+								const shade = shadeOf(point);
+								return h(
+									'div',
+									{
+										key: point.route,
+										className: 'gdcc_ovPointAnchor',
+										style: { left: at(fx), bottom: at(fy) },
+									},
+									[
+										h('i', {
+											key: 'dot',
+											className:
+												modelHover !== null && modelHover.includes(point.route)
+													? 'gdcc_ovPoint gdcc_ovPoint--on'
+													: 'gdcc_ovPoint',
+											style: { width: BUBBLE + 'px', height: BUBBLE + 'px', background: shade },
+										}),
+										h(
+											'span',
+											{ key: 'label', className: 'gdcc_ovPointLabel', style: labelStyle },
+											shortModelName(point.route, LABEL_MAX),
+										),
+									],
+								);
+							}),
+							tip,
+							...yTicks.map((value, index) =>
 								h(
 									'span',
-									{ key: 'track', className: 'gdcc_ovTrack' },
-									h('i', {
-										key: 'fill',
-										className: 'gdcc_ovTrackSeg gdcc_ovBarSeg--input',
-										style: { width: share(route.micros, total) + '%' },
-									}),
+									{
+										key: 'ytick' + index,
+										className: 'gdcc_ovScatterTick gdcc_ovScatterTick--y',
+										style: { bottom: at(value / yMax) },
+									},
+									compactTokens(value),
 								),
-								h('span', { key: 'share', className: 'gdcc_ovMuted' }, percent(share(route.micros, total))),
 							),
-						]);
-					}),
+							...xTicks.map((value, index) =>
+								h(
+									'span',
+									{
+										key: 'xtick' + index,
+										className: 'gdcc_ovScatterTick gdcc_ovScatterTick--x',
+										style: { left: at(tickFraction(value)) },
+									},
+									shortMoneyText(money(microsOf(value)), false),
+								),
+							),
+						],
+					),
+					h('span', { key: 'titleX', className: 'gdcc_ovScatterTitle gdcc_ovScatterTitle--x' }, t('scatterAxisX')),
 				]),
+				legend,
 			]);
 		}
 

@@ -48,6 +48,7 @@ Folded session states are cached under `data/cache/sessions/<session-id>.json`. 
 | `client/pricing-table.js` | Provider/model price rows with per-model peak rules / 按提供方分组的价格表及每行的峰谷规则选择 |
 | `client/cost-view.js` | Projection subscription and live repricing / projection 订阅和实时重新计价 |
 | `client/cost-overview.js` | Overview page: charts, model table, range controls and error banner / 费用统计页面：图表、模型表、范围控件和错误提示 |
+| `client/overview-charts.js` | Trend bar date ranges and model scatter scaling / 趋势柱日期区间与模型散点比例 |
 | `client/overview-request.js` | Preset range list and one overview request with cache bypass / 预设范围列表及单次费用统计请求（可跳过缓存） |
 | `client/overview-prefetch.js` | Timer that warms all five preset ranges and follows the setting / 按设置定时并行预热五个预设范围 |
 | `client/cost-chips.js`, `client/cost-dialog.js` | Session/turn chips, peak/off-peak detail groups and formula popovers / 费用标签、峰价/谷价明细分组和公式弹层 |
@@ -68,7 +69,7 @@ The configuration page loads `@deepseek-ai/dsh-client-ui-primitives` with the mo
 - Keep the plugin ID, projection key, locale namespace and slots from `identity.js` unchanged.
 - Keep the configuration and sync route paths stable. GET can return the local configuration before history discovery finishes; `historyPending` and `calendarPending` request bounded local refreshes while those operations run.
 - Use exact local `provider/model` prices. Third-party price matching uses only the model ID.
-- Keep official token/retry folds and turn retention. Projection state version 4 preserves `event.time` and partitions tokens by route, Beijing date and one of seven clock windows. DSH replays old checkpoint data from the durable log.
+- Keep official token/retry folds and turn retention. Projection state version 5 preserves `event.time` and partitions tokens by route, Beijing date and one of seven clock windows; a `session/end-seed` with `inherited: true` restarts the fold, because the transcript before it was already billed to the original session. DSH replays old checkpoint data from the durable log.
 - Keep revision checks and the re-read after network initialization. Manual prices must win over delayed initialization.
 - Keep the staged sync contract: POST `pricing/sync` with a `config` body prices that staged config and returns `preview` plus `report` without writing; without `config` it keeps saving the synced configuration.
 - 保持暂存同步契约：POST `pricing/sync` 带 `config` 体时只对该草稿计价并返回 `preview` 与 `report`，不写盘；不带 `config` 时保持同步并写盘的旧行为。

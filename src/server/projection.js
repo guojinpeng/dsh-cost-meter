@@ -192,6 +192,12 @@ function settleTurn(state, event) {
 function applyToState(state, event) {
 	const type = typeof event?.type === 'string' ? event.type : '';
 
+	// A side thread or a forked subagent writes the inherited transcript into its
+	// own log, and then closes the seed with `session/end-seed`. Those turns were
+	// already billed to the original session, so the fold restarts at the marker
+	// and only the events after it count for this session.
+	if (type === 'session/end-seed' && event.data?.inherited === true) return initialState();
+
 	if (type === 'turn/start') {
 		const turn = typeof event.data?.turn === 'number' ? event.data.turn : null;
 		const compact = compactEvent(event);
@@ -230,7 +236,7 @@ export function createCostUsageProjection(readResolvedConfig = readConfig, holid
 	const views = new WeakMap();
 	return {
 		key: PROJECTION_KEY,
-		stateVersion: 4,
+		stateVersion: 5,
 		stateSchema,
 		init: () => initialState(),
 		apply: (state, event) => {

@@ -797,15 +797,27 @@
 .gdcc_ovAxis.gdcc_ovAxis--thin .gdcc_ovAxisLabel {
 	overflow: visible;
 }
+/* A clickable column: reset the button box so the bar keeps its width. */
 .gdcc_ovBarColumn {
 	position: relative;
 	display: flex;
 	align-items: flex-end;
+	box-sizing: border-box;
+	width: 100%;
 	height: 100%;
+	padding: 0;
+	font: inherit;
+	background: 0 0;
+	border: 0;
 	border-radius: var(--dsw-radius-xs);
+	cursor: pointer;
 }
 .gdcc_ovBarColumn:hover {
 	background: var(--dsw-alias-interactive-bg-hover);
+}
+.gdcc_ovBarColumn:focus-visible {
+	outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+	outline-offset: 2px;
 }
 .gdcc_ovBar {
 	display: flex;
@@ -861,6 +873,12 @@
 	border-radius: var(--dsw-radius-md);
 	box-shadow: var(--dsw-shadow-l2, 0 4px 16px rgba(0, 0, 0, 0.16));
 	pointer-events: none;
+}
+/* Overlapping bubbles share one tooltip: one block per model, stacked. */
+.gdcc_ovTipGroup + .gdcc_ovTipGroup {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 0.5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
 }
 .gdcc_ovTipHead {
 	color: var(--dsw-alias-label-secondary);
@@ -1107,6 +1125,211 @@
 	flex: none;
 	min-width: 44px;
 	text-align: right;
+}
+/* Model scatter: total spend on a log x axis, consumed tokens on y. */
+.gdcc_ovScatterView {
+	margin-top: 16px;
+}
+.gdcc_ovScatter {
+	position: relative;
+	padding: 30px 24px 40px 56px;
+}
+/* Axis names sit in the gutters, not on the plot. */
+.gdcc_ovScatterTitle {
+	position: absolute;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 11px;
+	line-height: 16px;
+}
+.gdcc_ovScatterTitle--y {
+	top: 0;
+	left: 0;
+}
+.gdcc_ovScatterTitle--x {
+	right: 0;
+	bottom: 0;
+}
+.gdcc_ovScatterPlot {
+	position: relative;
+	/* The height is an inline style: the label layout needs the pixel size. */
+	border-left: 0.5px solid var(--dsw-alias-border-l2);
+	border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+	cursor: crosshair;
+}
+.gdcc_ovScatterGrid {
+	position: absolute;
+	left: 0;
+	right: 0;
+	border-top: 0.5px dashed color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+.gdcc_ovScatterGrid--v {
+	top: 0;
+	bottom: 0;
+	width: 0;
+	border-top: 0;
+	border-left: 0.5px dashed color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+.gdcc_ovPointAnchor {
+	position: absolute;
+	width: 0;
+	height: 0;
+}
+/* A circle centred on the anchor: the anchor already is the data point. */
+.gdcc_ovPoint {
+	position: absolute;
+	left: 0;
+	top: 0;
+	box-sizing: border-box;
+	/* The fill is inline: its hue and lightness follow the blended price. */
+	background: var(--gdcc-ov-read);
+	/* A thin ring keeps the palest bubbles readable on a light card. */
+	border: 1px solid color-mix(in srgb, var(--gdcc-ov-input) 45%, transparent);
+	border-radius: 50%;
+	transform: translate(-50%, -50%);
+}
+.gdcc_ovPoint--on {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--gdcc-ov-input) 24%, transparent);
+}
+/* Model legend under the plot: provider on the left, one button per model. */
+.gdcc_ovModelLegend {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 6px;
+	padding: 0 24px 0 56px;
+}
+.gdcc_ovModelLegendRow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 4px;
+}
+.gdcc_ovModelLegendProvider {
+	flex: none;
+	min-width: 72px;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 11px;
+	line-height: 18px;
+}
+.gdcc_ovModelLegendItem {
+	box-sizing: border-box;
+	padding: 0 8px;
+	color: var(--dsw-alias-label-secondary);
+	font: inherit;
+	font-size: 11px;
+	line-height: 18px;
+	background: 0 0;
+	border: 0.5px solid transparent;
+	border-radius: 999px;
+	cursor: pointer;
+}
+.gdcc_ovModelLegendItem:hover {
+	background: var(--dsw-alias-interactive-bg-hover);
+}
+.gdcc_ovModelLegendItem[aria-pressed='false'] {
+	opacity: 0.4;
+	text-decoration: line-through;
+}
+.gdcc_ovModelLegendItem:focus-visible {
+	outline: 2px solid var(--dsw-alias-label-primary);
+	outline-offset: 1px;
+}
+/* The label sits at the top right corner of its bubble; the pair sets the corner. */
+.gdcc_ovPointLabel {
+	position: absolute;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 10px;
+	line-height: 14px;
+	white-space: nowrap;
+	pointer-events: none;
+}
+.gdcc_ovScatterTick {
+	position: absolute;
+	color: var(--dsw-alias-label-secondary);
+	font-size: 11px;
+	line-height: 16px;
+	white-space: nowrap;
+	pointer-events: none;
+	font-variant-numeric: tabular-nums;
+}
+.gdcc_ovScatterTick--y {
+	left: 0;
+	transform: translate(calc(-100% - 6px), 50%);
+}
+.gdcc_ovScatterTick--x {
+	top: 100%;
+	margin-top: 4px;
+	transform: translateX(-50%);
+}
+/* Crosshair: dashed guides plus the value of the pointer on each axis. */
+.gdcc_ovCrossLayer {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.1s ease-out;
+}
+.gdcc_ovCrossV {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-left: 1px dashed color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
+}
+.gdcc_ovCrossH {
+	position: absolute;
+	left: 0;
+	right: 0;
+	border-top: 1px dashed color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
+}
+.gdcc_ovCrossX,
+.gdcc_ovCrossY {
+	position: absolute;
+	padding: 1px 6px;
+	color: var(--dsw-alias-label-primary);
+	font-size: 10px;
+	line-height: 14px;
+	white-space: nowrap;
+	background: var(--dsw-alias-bg-layer-1);
+	border: 0.5px solid var(--dsw-alias-border-l2);
+	border-radius: 4px;
+	font-variant-numeric: tabular-nums;
+}
+/* The readouts ride inside the plot, so they never sit on the tick labels. */
+.gdcc_ovCrossX {
+	bottom: 2px;
+	transform: translateX(-50%);
+}
+.gdcc_ovCrossY {
+	left: 2px;
+	transform: translateY(50%);
+}
+.gdcc_ovScatterEmpty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 260px;
+	margin-top: 16px;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 12px;
+	line-height: 18px;
+}
+/* Average price of one million tokens, under the tooltip total. */
+.gdcc_ovTipAvg {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	color: var(--dsw-alias-label-tertiary);
+	font-size: 11px;
+	line-height: 16px;
+}
+.gdcc_ovTipAvgValue {
+	font-variant-numeric: tabular-nums;
+}
+/* The model tooltip lists money and tokens side by side. */
+.gdcc_ovTipTotalValue {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
 }
 .gdcc_ovSessions {
 	display: flex;
